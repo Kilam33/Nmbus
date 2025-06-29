@@ -14,6 +14,11 @@ import SettingsPage from './pages/Settings';
 import HeroPage from './pages/Hero'; 
 import ResetPassword from './pages/ResetPassword';
 import UpdatePassword from './pages/UpdatePassword';
+import LowStock from './pages/LowStock';
+import ExpiringSoon from './pages/ExpiringSoon';
+import SalesReport from './pages/SalesReport';
+import InventoryTurnover from './pages/InventoryTurnover';
+import ReorderSuggestions from './pages/ReorderSuggestions';
 
 // This component will redirect based on auth state
 const HomeRedirect = () => {
@@ -42,6 +47,11 @@ function App() {
             <Route path="orders" element={<Orders />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="low-stock" element={<LowStock />} />
+            <Route path="expiring-soon" element={<ExpiringSoon />} />
+            <Route path="sales-report" element={<SalesReport />} />
+            <Route path="inventory-turnover" element={<InventoryTurnover />} />
+            <Route path="reorder-suggestions" element={<ReorderSuggestions />} />
           </Route>
         </Routes>
       </AuthProvider>

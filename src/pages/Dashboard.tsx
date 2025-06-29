@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Package, DollarSign, ShoppingCart, TrendingUp, AlertTriangle, 
   Truck, BarChart2, Calendar, Clock, Settings, Search, Filter, 
-  RefreshCw, Archive, ArrowDown, ArrowUp, Tags, Users, ClipboardList
+  RefreshCw, Archive, ArrowDown, ArrowUp, Tags, Users, ClipboardList, 
+  CheckCircle, XCircle
 } from 'lucide-react';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, 
@@ -10,16 +11,7 @@ import {
 } from 'recharts';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
-
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-  trend: string | null;
-  trendDirection: 'positive' | 'negative' | 'neutral';
-  onClick?: () => void;
-  color?: string;
-}
+import StatCard from '../components/ui/StatCard';
 
 interface AlertProps {
   id: number;
@@ -45,6 +37,17 @@ interface InventoryItemProps {
   threshold: number;
   category: string;
   location: string;
+}
+
+interface OrderProps {
+  id: number;
+  orderNumber: string;
+  customer: string;
+  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  total: number;
+  items: number;
+  date: string;
+  priority: 'high' | 'medium' | 'low';
 }
 
 interface DashboardData {
@@ -83,72 +86,20 @@ interface DashboardData {
     revenue: number;
     inStock: number;
   }[];
+  recentOrders: OrderProps[];
+  orderStats: {
+    pending: number;
+    processing: number;
+    shipped: number;
+    delivered: number;
+    cancelled: number;
+  };
+  orderTrends: {
+    name: string;
+    orders: number;
+    revenue: number;
+  }[];
 }
-
-const StatCard: React.FC<StatCardProps> = ({ 
-  title, 
-  value, 
-  icon: Icon, 
-  trend, 
-  trendDirection,
-  onClick,
-  color = 'indigo' 
-}) => {
-  const trendColorMap = {
-    positive: 'text-emerald-400',
-    negative: 'text-rose-400',
-    neutral: 'text-slate-400'
-  };
-
-  const bgColorMap = {
-    indigo: 'bg-indigo-900/30',
-    emerald: 'bg-emerald-900/30',
-    amber: 'bg-amber-900/30',
-    rose: 'bg-rose-900/30',
-    violet: 'bg-violet-900/30',
-    green: 'bg-green-900/30'
-  };
-
-  const textColorMap = {
-    indigo: 'text-indigo-400',
-    emerald: 'text-emerald-400',
-    amber: 'text-amber-400',
-    rose: 'text-rose-400',
-    violet: 'text-violet-400',
-    green: 'text-green-400'
-  };
-
-  return (
-    <div 
-      className="bg-slate-800 p-6 rounded-lg shadow-lg border border-slate-700 hover:border-slate-600 transition-all duration-300"
-      onClick={onClick}
-    >
-      <div className="flex items-center mb-4">
-        <div className={`p-3 rounded-full ${bgColorMap[color as keyof typeof bgColorMap]} mr-4`}>
-          <Icon className={`h-6 w-6 ${textColorMap[color as keyof typeof textColorMap]}`} />
-        </div>
-        <div>
-          <p className="text-sm text-slate-400">{title}</p>
-          <p className="text-2xl font-bold text-white">{value}</p>
-        </div>
-      </div>
-      {trend && (
-        <div className="flex items-center">
-          {trendDirection === 'positive' ? (
-            <ArrowUp className={`h-4 w-4 mr-2 ${trendColorMap[trendDirection]}`} />
-          ) : trendDirection === 'negative' ? (
-            <ArrowDown className={`h-4 w-4 mr-2 ${trendColorMap[trendDirection]}`} />
-          ) : (
-            <TrendingUp className={`h-4 w-4 mr-2 ${trendColorMap[trendDirection]}`} />
-          )}
-          <span className={`text-sm ${trendColorMap[trendDirection]}`}>
-            {trend}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-};
 
 const Alert: React.FC<{ alert: AlertProps }> = ({ alert }) => {
   const severityColors = {
@@ -191,6 +142,51 @@ const InventoryItem: React.FC<{ item: InventoryItemProps }> = ({ item }) => {
   );
 };
 
+const Order: React.FC<{ order: OrderProps }> = ({ order }) => {
+  const statusColors = {
+    pending: 'bg-yellow-500',
+    processing: 'bg-blue-500',
+    shipped: 'bg-purple-500',
+    delivered: 'bg-green-500',
+    cancelled: 'bg-red-500'
+  };
+
+  const priorityColors = {
+    high: 'bg-red-500',
+    medium: 'bg-yellow-500',
+    low: 'bg-green-500'
+  };
+
+  const statusText = {
+    pending: 'Pending',
+    processing: 'Processing',
+    shipped: 'Shipped',
+    delivered: 'Delivered',
+    cancelled: 'Cancelled'
+  };
+
+  return (
+    <div className="p-3 bg-slate-700/50 rounded-lg mb-2 border border-slate-600 hover:bg-slate-700 transition-all">
+      <div className="flex justify-between items-start mb-2">
+        <div>
+          <span className="font-medium text-slate-200">{order.orderNumber}</span>
+          <span className="text-slate-400 text-sm ml-2">• {order.customer}</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <span className={`w-2 h-2 rounded-full ${priorityColors[order.priority]}`}></span>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[order.status]} text-white`}>
+            {statusText[order.status]}
+          </span>
+        </div>
+      </div>
+      <div className="flex justify-between items-center text-sm">
+        <span className="text-slate-400">{order.date} • {order.items} items</span>
+        <span className="text-emerald-400 font-medium">${order.total}</span>
+      </div>
+    </div>
+  );
+};
+
 const Dashboard: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     totalProducts: 0,
@@ -207,7 +203,16 @@ const Dashboard: React.FC = () => {
     inventoryTrends: [],
     categoryBreakdown: [],
     lowStockInventory: [],
-    topSellingProducts: []
+    topSellingProducts: [],
+    recentOrders: [],
+    orderStats: {
+      pending: 0,
+      processing: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0
+    },
+    orderTrends: []
   });
   
   const [selectedView, setSelectedView] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
@@ -310,6 +315,26 @@ const Dashboard: React.FC = () => {
         { id: 2, name: 'Wireless Earbuds Pro', sold: 200, revenue: 36000, inStock: 150 },
       ];
 
+      const recentOrders = [
+        { id: 1, orderNumber: 'ORD-12345', customer: 'John Doe', status: 'pending', total: 150, items: 3, date: '2024-04-10', priority: 'medium' },
+        { id: 2, orderNumber: 'ORD-12346', customer: 'Jane Smith', status: 'processing', total: 200, items: 4, date: '2024-04-11', priority: 'high' },
+        { id: 3, orderNumber: 'ORD-12347', customer: 'Bob Johnson', status: 'shipped', total: 100, items: 2, date: '2024-04-12', priority: 'low' },
+      ];
+
+      const orderStats = {
+        pending: 5,
+        processing: 3,
+        shipped: 2,
+        delivered: 1,
+        cancelled: 0
+      };
+
+      const orderTrends = [
+        { name: 'Jan', orders: 10, revenue: 1000 },
+        { name: 'Feb', orders: 12, revenue: 1200 },
+        { name: 'Mar', orders: 15, revenue: 1500 },
+      ];
+
       setDashboardData({
         totalProducts: productsCount || 0,
         totalCategories: categoriesCount || 0,
@@ -325,7 +350,10 @@ const Dashboard: React.FC = () => {
         inventoryTrends,
         categoryBreakdown,
         lowStockInventory,
-        topSellingProducts
+        topSellingProducts,
+        recentOrders,
+        orderStats,
+        orderTrends
       });
 
       setLastRefreshed(new Date());
@@ -416,9 +444,11 @@ const Dashboard: React.FC = () => {
               Last updated: {formattedLastRefreshed} 
               <button 
                 onClick={fetchDashboardData}
-                className="ml-3 text-indigo-400 hover:text-indigo-300 inline-flex items-center"
+                disabled={isLoading}
+                className={`ml-3 ${isLoading ? 'text-slate-500' : 'text-indigo-400 hover:text-indigo-300'} inline-flex items-center`}
               >
-                <RefreshCw className={`h-3 w-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
+                <RefreshCw className={`h-3 w-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} /> 
+                {isLoading ? 'Refreshing...' : 'Refresh'}
               </button>
             </p>
           </div>
@@ -472,24 +502,18 @@ const Dashboard: React.FC = () => {
                 title="Total Products"
                 value={dashboardData.totalProducts}
                 icon={Package}
-                trend={null}
-                trendDirection={getTrendDirection(null)}
                 color="indigo"
               />
               <StatCard
                 title="Total Categories"
                 value={dashboardData.totalCategories}
                 icon={Tags}
-                trend={null}
-                trendDirection={getTrendDirection(null)}
                 color="emerald"
               />
               <StatCard
                 title="Total Suppliers"
                 value={dashboardData.totalSuppliers}
                 icon={Users}
-                trend={null}
-                trendDirection={getTrendDirection(null)}
                 color="amber"
               />
               <StatCard
@@ -497,7 +521,7 @@ const Dashboard: React.FC = () => {
                 value={dashboardData.totalOrders}
                 icon={ClipboardList}
                 trend="+5.2%"
-                trendDirection={getTrendDirection("+5.2%")}
+                trendDirection="positive"
                 color="violet"
               />
               <StatCard
@@ -505,15 +529,13 @@ const Dashboard: React.FC = () => {
                 value={`$${dashboardData.revenue.toLocaleString()}`}
                 icon={DollarSign}
                 trend={`${dashboardData.revenueChange > 0 ? '+' : ''}${dashboardData.revenueChange}%`}
-                trendDirection={getTrendDirection(`${dashboardData.revenueChange > 0 ? '+' : ''}${dashboardData.revenueChange}%`)}
+                trendDirection={dashboardData.revenueChange > 0 ? 'positive' : 'negative'}
                 color="green"
               />
               <StatCard
                 title="Low Stock Items"
                 value={dashboardData.lowStockItems}
                 icon={AlertTriangle}
-                trend={null}
-                trendDirection={getTrendDirection(null)}
                 color="rose"
               />
             </div>
@@ -828,19 +850,171 @@ const Dashboard: React.FC = () => {
         
         {/* Orders Section */}
         {selectedSection === 'orders' && (
-          <div className="bg-slate-800 rounded-lg border border-slate-700 p-6 text-center">
-            <Calendar className="h-12 w-12 mx-auto text-indigo-400 mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">Order Management</h2>
-            <p className="text-slate-400 mb-4">Order management section is coming soon in the next update.</p>
-            <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-md text-white text-sm transition-colors">
-              View Orders Overview
-            </button>
-          </div>
+          <>
+            {/* Order Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+              <StatCard
+                title="Pending Orders"
+                value={dashboardData.orderStats.pending}
+                icon={Clock}
+                color="amber"
+              />
+              <StatCard
+                title="Processing"
+                value={dashboardData.orderStats.processing}
+                icon={Settings}
+                color="blue"
+              />
+              <StatCard
+                title="Shipped"
+                value={dashboardData.orderStats.shipped}
+                icon={Truck}
+                color="violet"
+              />
+              <StatCard
+                title="Delivered"
+                value={dashboardData.orderStats.delivered}
+                icon={CheckCircle}
+                color="emerald"
+              />
+              <StatCard
+                title="Cancelled"
+                value={dashboardData.orderStats.cancelled}
+                icon={XCircle}
+                color="rose"
+              />
+            </div>
+
+            {/* Order Trends and Recent Orders */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Order Trends */}
+              <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-white">Order Trends</h2>
+                  <span className="text-sm text-slate-400">Last 3 months</span>
+                </div>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={dashboardData.orderTrends}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                      <XAxis dataKey="name" stroke="#64748b" />
+                      <YAxis stroke="#64748b" />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1e293b', 
+                          borderColor: '#334155',
+                          color: '#fff'
+                        }}
+                      />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="orders" 
+                        name="Orders" 
+                        stroke="#8b5cf6" 
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        activeDot={{ r: 6 }} 
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="revenue" 
+                        name="Revenue ($)" 
+                        stroke="#22d3ee" 
+                        strokeWidth={2} 
+                        dot={{ r: 4 }}
+                        activeDot={{ r: 6 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Recent Orders */}
+              <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-white flex items-center">
+                    <ShoppingCart className="h-5 w-5 text-indigo-400 mr-2" />
+                    Recent Orders
+                  </h2>
+                  <button className="text-xs text-indigo-400 hover:text-indigo-300">
+                    View All
+                  </button>
+                </div>
+                <div className="max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                  {dashboardData.recentOrders.map((order) => (
+                    <Order key={order.id} order={order} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Orders by Status Chart */}
+            <div className="bg-slate-800 rounded-lg border border-slate-700 p-6 mb-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold">Orders by Status</h2>
+                <span className="text-sm text-slate-400">Current period</span>
+              </div>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dashboardData.ordersByStatus}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis 
+                      dataKey="status" 
+                      stroke="#94a3b8"
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis 
+                      stroke="#94a3b8"
+                      tick={{ fontSize: 12 }}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar 
+                      dataKey="count" 
+                      fill="#6366f1" 
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 text-center">
+                <ShoppingCart className="h-8 w-8 mx-auto text-indigo-400 mb-3" />
+                <h3 className="text-lg font-semibold text-white mb-2">Create Order</h3>
+                <p className="text-slate-400 text-sm mb-4">Add new customer orders</p>
+                <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-md text-white text-sm transition-colors">
+                  New Order
+                </button>
+              </div>
+              
+              <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 text-center">
+                <Truck className="h-8 w-8 mx-auto text-emerald-400 mb-3" />
+                <h3 className="text-lg font-semibold text-white mb-2">Process Shipments</h3>
+                <p className="text-slate-400 text-sm mb-4">Update order status</p>
+                <button className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-md text-white text-sm transition-colors">
+                  Process Orders
+                </button>
+              </div>
+              
+              <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 text-center">
+                <BarChart2 className="h-8 w-8 mx-auto text-purple-400 mb-3" />
+                <h3 className="text-lg font-semibold text-white mb-2">Order Reports</h3>
+                <p className="text-slate-400 text-sm mb-4">Generate order analytics</p>
+                <button className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-white text-sm transition-colors">
+                  View Reports
+                </button>
+              </div>
+            </div>
+          </>
         )}
         
         {/* Footer */}
         <div className="mt-8 pt-4 border-t border-slate-800 text-sm text-slate-500 text-center">
-        <p>© {new Date().getFullYear()} NIMBUS. All rights reserved.</p>        </div>
+          <p>© {new Date().getFullYear()} NIMBUS. All rights reserved.</p>
+        </div>
       </div>
     </div>
   );

@@ -26,6 +26,7 @@ import {
   ArrowDown,
   Search
 } from 'lucide-react';
+import { Card } from '../components/ui';
 
 interface SalesData {
   date: string;
@@ -199,12 +200,10 @@ const Analytics = () => {
         </div>
 
         {/* Forecast Period Selector */}
-        <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white flex items-center">
-              <Calculator className="h-5 w-5 text-indigo-400 mr-2" />
-              Forecast Settings
-            </h2>
+        <Card 
+          title="Forecast Settings"
+          icon={Calculator}
+          action={
             <select
               value={forecastPeriod}
               onChange={(e) => setForecastPeriod(Number(e.target.value))}
@@ -214,12 +213,16 @@ const Analytics = () => {
               <option value={6}>6 Months Forecast</option>
               <option value={12}>12 Months Forecast</option>
             </select>
+          }
+          className="mb-6"
+        >
+          <div className="text-slate-400 text-sm">
+            Configure forecast period and settings for demand prediction analysis.
           </div>
-        </div>
+        </Card>
 
         {/* Main Chart */}
-        <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 mb-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Sales Trend & Forecast</h2>
+        <Card title="Sales Trend & Forecast" className="mb-6">
           <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={salesData}>
@@ -256,13 +259,12 @@ const Analytics = () => {
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
 
         {/* Product Demand Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Product Demand Forecast */}
-          <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-            <h2 className="text-lg font-semibold text-white mb-4">Product Demand Forecast</h2>
+          <Card title="Product Demand Forecast">
             <div className="space-y-3">
               {topProducts.map((product) => (
                 <div
@@ -312,11 +314,10 @@ const Analytics = () => {
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
 
           {/* Demand Distribution */}
-          <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-            <h2 className="text-lg font-semibold text-white mb-4">Demand Distribution</h2>
+          <Card title="Demand Distribution">
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topProducts}>
@@ -340,15 +341,11 @@ const Analytics = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Forecasting Insights */}
-        <div className="bg-slate-800 rounded-lg border border-slate-700 p-6">
-          <div className="flex items-center space-x-2 mb-4">
-            <AlertTriangle className="h-5 w-5 text-amber-400" />
-            <h2 className="text-lg font-semibold text-white">Forecasting Insights</h2>
-          </div>
+        <Card title="Forecasting Insights" icon={AlertTriangle} padding="lg">
           <div className="text-slate-300 space-y-3">
             <p>
               The demand forecasting model uses a combination of:
@@ -364,7 +361,7 @@ const Analytics = () => {
               and data consistency. Scores above 90% suggest highly reliable forecasts.
             </p>
           </div>
-        </div>
+        </Card>
 
         {/* Footer */}
         <div className="mt-8 pt-4 border-t border-slate-800 text-sm text-slate-500 text-center">
