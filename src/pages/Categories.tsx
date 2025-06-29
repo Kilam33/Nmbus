@@ -3,11 +3,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Plus, Edit2, Trash2, X, Search, RefreshCw, Box, ChevronRight } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import type { Database } from '../types/supabase';
+import { CategoriesService, Category } from '../services/categories';
+import { ProductsService, Product } from '../services/products';
+import { apiClient } from '../lib/api';
 import { toast } from 'react-hot-toast';
 
-type Category = Database['public']['Tables']['categories']['Row'] & {
+type CategoryWithCount = Category & {
   product_count?: number;
 };
 
@@ -19,9 +20,9 @@ const categorySchema = z.object({
 type CategoryFormData = z.infer<typeof categorySchema>;
 
 export default function Categories() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [filteredCategories, setFilteredCategories] = useState<Category[]>([]);
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [categories, setCategories] = useState<CategoryWithCount[]>([]);
+  const [filteredCategories, setFilteredCategories] = useState<CategoryWithCount[]>([]);
+  const [editingCategory, setEditingCategory] = useState<CategoryWithCount | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,27 +57,21 @@ export default function Categories() {
       setStatsLoading(true);
       
       // Fetch categories
-      const { data: categoriesData, error: categoriesError } = await supabase
-        .from('categories')
-        .select('*')
-        .order('name', { ascending: true });
+      const response = await CategoriesService.getCategories();
 
-      if (categoriesError) throw categoriesError;
+      if (!response.success) throw new Error('Error fetching categories');
 
       // Get product counts for categories - use separate queries
       const enhancedCategories = [];
       
-      for (const category of categoriesData || []) {
-        const { count, error: countError } = await supabase
-          .from('products')
-          .select('*', { count: 'exact', head: true })
-          .eq('category_id', category.id);
+      for (const category of response.data || []) {
+        const productsResponse = await apiClient.get<Product[]>(`/products?category_id=${category.id}`);
           
-        if (countError) throw countError;
+        if (!productsResponse.success) throw new Error('Error fetching product count');
         
         enhancedCategories.push({
           ...category,
-          product_count: count || 0
+          product_count: (productsResponse.data as Product[])?.length || 0
         });
       }
 
@@ -94,15 +89,10 @@ export default function Categories() {
     try {
       setLoading(true);
       if (editingCategory) {
-        const { error } = await supabase
-          .from('categories')
-          .update(data)
-          .eq('id', editingCategory.id);
-        if (error) throw error;
+        await CategoriesService.updateCategory({ id: editingCategory.id, ...data });
         toast.success('Category updated successfully');
       } else {
-        const { error } = await supabase.from('categories').insert([data]);
-        if (error) throw error;
+        await CategoriesService.createCategory(data);
         toast.success('Category created successfully');
       }
       await fetchCategories();
@@ -117,7 +107,7 @@ export default function Categories() {
     }
   };
 
-  const handleEdit = (category: Category) => {
+  const handleEdit = (category: CategoryWithCount) => {
     setEditingCategory(category);
     setValue('name', category.name);
     setValue('description', category.description || '');
@@ -126,19 +116,15 @@ export default function Categories() {
 
   const handleDelete = async (id: string) => {
     // Check if category has products before deleting
-    const { data: products, error: productsError } = await supabase
-      .from('products')
-      .select('id')
-      .eq('category_id', id)
-      .limit(1);
+    const productsResponse = await apiClient.get<Product[]>(`/products?category_id=${id}`);
 
-    if (productsError) {
+    if (!productsResponse.success) {
       toast.error('Error checking category usage');
-      console.error('Error checking category usage:', productsError);
+      console.error('Error checking category usage:', productsResponse.error);
       return;
     }
 
-    if (products && products.length > 0) {
+    if ((productsResponse.data as Product[]) && (productsResponse.data as Product[]).length > 0) {
       toast.error('Cannot delete category with associated products');
       return;
     }
@@ -146,8 +132,7 @@ export default function Categories() {
     if (window.confirm('Are you sure you want to delete this category?')) {
       try {
         setLoading(true);
-        const { error } = await supabase.from('categories').delete().eq('id', id);
-        if (error) throw error;
+        await CategoriesService.deleteCategory(id);
         toast.success('Category deleted successfully');
         await fetchCategories();
       } catch (error) {

@@ -2,6 +2,7 @@
 import React, { useState, ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { ProductsService } from '../services/products';
 import {
   Package2,
   Bell,
@@ -92,7 +93,7 @@ const Navbar: React.FC = () => {
   // Mock data fetching effects
   useEffect(() => {
     if (user) {
-      // Simulate fetching notifications
+      // Simulate fetching notifications (no backend endpoint yet)
       const mockNotifications: NotificationProps[] = [
         {
           id: '1',
@@ -123,44 +124,57 @@ const Navbar: React.FC = () => {
       setNotifications(mockNotifications);
       setUnreadNotificationsCount(mockNotifications.filter(n => !n.isRead).length);
 
-      // Simulate fetching system alerts
-      setLowStockCount(5);
-      setPendingOrdersCount(3);
+      // Fetch real alert counts
+      const fetchAlertCounts = async () => {
+        try {
+          // Get low stock products count
+          const lowStockResponse = await ProductsService.getLowStockProducts(100);
+          if (lowStockResponse) {
+            setLowStockCount(lowStockResponse.length);
+          }
+
+          // Get pending orders count (mock for now since no orders service method)
+          setPendingOrdersCount(3);
+        } catch (error) {
+          console.error('Error fetching alert counts:', error);
+          // Fallback to mock data
+          setLowStockCount(5);
+          setPendingOrdersCount(3);
+        }
+      };
+
+      fetchAlertCounts();
     }
   }, [user]);
 
   // Mock search functionality
   useEffect(() => {
     if (user && searchQuery.length > 2) {
-      // Simulate API search results
-      const mockResults: SearchResultProps[] = [
-        {
-          id: 'p1',
-          type: 'product',
-          title: 'Widget A',
-          subtitle: 'SKU: WA-1234 | Stock: 23'
-        },
-        {
-          id: 'p2',
-          type: 'product',
-          title: 'Widget B',
-          subtitle: 'SKU: WB-5678 | Stock: 45'
-        },
-        {
-          id: 'o1',
-          type: 'order',
-          title: 'Order #ORD-2023-05',
-          subtitle: 'Status: Pending | Supplier: Acme Inc.'
-        },
-        {
-          id: 's1',
-          type: 'supplier',
-          title: 'Acme Inc.',
-          subtitle: 'Last order: 5 days ago'
+      // Use ProductsService for search
+      const performSearch = async () => {
+        try {
+          const response = await ProductsService.searchProducts(searchQuery, { limit: 5 });
+          
+          if (response.success) {
+            const products = response.data || [];
+            const searchResults: SearchResultProps[] = products.map(product => ({
+              id: product.id,
+              type: 'product',
+              title: product.name,
+              subtitle: `SKU: ${product.sku || 'N/A'} | Stock: ${product.quantity}`
+            }));
+            
+            setSearchResults(searchResults);
+          } else {
+            setSearchResults([]);
+          }
+        } catch (error) {
+          console.error('Search error:', error);
+          setSearchResults([]);
         }
-      ];
+      };
 
-      setSearchResults(mockResults);
+      performSearch();
     } else {
       setSearchResults([]);
     }
@@ -376,9 +390,8 @@ const Navbar: React.FC = () => {
                 {isProfileDropdownOpen && (
                   <div className="absolute right-0 mt-3 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl z-20 overflow-hidden">
                     <div className="py-3 px-4 border-b border-slate-700">
-                      <div className="text-sm font-medium text-white">{user.id}</div>
-                      <div className="text-xs text-slate-400">{user.email}</div>
-                      <div className="text-xs text-indigo-400 mt-1">{user.role}</div>
+                      <div className="text-sm font-medium text-white">{user.email}</div>
+                      <div className="text-xs text-slate-400">User ID: {user.id}</div>
                     </div>
 
                     <div className="py-1">

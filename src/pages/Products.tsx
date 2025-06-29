@@ -7,12 +7,9 @@ import {
   RefreshCw, Download, Printer, Package, 
   ArrowUp, ArrowDown, AlertTriangle
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import type { Database } from '../types/supabase';
-
-type Product = Database['public']['Tables']['products']['Row'];
-type Category = Database['public']['Tables']['categories']['Row'];
-type Supplier = Database['public']['Tables']['suppliers']['Row'];
+import { ProductsService, Product, Category, Supplier } from '../services/products';
+import { apiClient } from '../lib/api';
+import { formatCurrency } from '../utils/formatters';
 
 const productSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -22,7 +19,7 @@ const productSchema = z.object({
   category_id: z.string().uuid(),
   supplier_id: z.string().uuid(),
   low_stock_threshold: z.number().min(0).default(10).optional(),
-  SKU: z.string().optional(),
+  sku: z.string().optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -67,17 +64,11 @@ export default function Products() {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
-        .from('products')
-        .select(`
-          *,
-          categories (name),
-          suppliers (name)
-        `);
+      const response = await ProductsService.getProducts();
       
-      if (error) throw new Error('Error fetching products: ' + error.message);
+      if (!response.success) throw new Error('Error fetching products');
       
-      const processedProducts = data?.map(product => ({
+      const processedProducts = response.data?.map(product => ({
         ...product,
         low_stock_threshold: Number(product.low_stock_threshold) || 10,
         last_updated: product.updated_at || new Date().toISOString()
@@ -94,26 +85,29 @@ export default function Products() {
   };
 
   const fetchCategories = async () => {
-    const { data, error } = await supabase.from('categories').select('*');
-    if (error) console.error('Error fetching categories:', error);
-    else setCategories(data || []);
+    try {
+      const response = await apiClient.get<Category[]>('/categories');
+      if (response.success) setCategories(response.data || []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
   };
 
   const fetchSuppliers = async () => {
-    const { data, error } = await supabase.from('suppliers').select('*');
-    if (error) console.error('Error fetching suppliers:', error);
-    else setSuppliers(data || []);
+    try {
+      const response = await apiClient.get<Supplier[]>('/suppliers');
+      if (response.success) setSuppliers(response.data || []);
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+    }
   };
 
   const onSubmit = async (data: ProductFormData) => {
     try {
       if (editingProduct) {
-        await supabase
-          .from('products')
-          .update(data)
-          .eq('id', editingProduct.id);
+        await ProductsService.updateProduct({ id: editingProduct.id, ...data });
       } else {
-        await supabase.from('products').insert([data]);
+        await ProductsService.createProduct(data);
       }
       await fetchProducts();
       reset();
@@ -128,16 +122,23 @@ export default function Products() {
     setEditingProduct(product);
     Object.keys(product).forEach((key) => {
       const value = product[key as keyof Product];
-      setValue(key as keyof ProductFormData, value === null ? undefined : value);
+      if (key === 'sku') {
+        setValue('sku', value as string);
+      } else if (typeof value === 'string' || typeof value === 'number') {
+        setValue(key as keyof ProductFormData, value);
+      }
     });
     setIsModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
-      const { error } = await supabase.from('products').delete().eq('id', id);
-      if (error) console.error('Error deleting product:', error);
-      else await fetchProducts();
+      try {
+        await ProductsService.deleteProduct(id);
+        await fetchProducts();
+      } catch (error) {
+        console.error('Error deleting product:', error);
+      }
     }
   };
 
@@ -163,7 +164,7 @@ export default function Products() {
     .filter(product => {
       const matchesSearch = searchTerm === '' || 
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (product.SKU && product.SKU.toLowerCase().includes(searchTerm.toLowerCase()));
+        (product.sku && product.sku.toLowerCase().includes(searchTerm.toLowerCase()));
       
       const matchesCategory = categoryFilter === '' || product.category_id === categoryFilter;
       
@@ -418,7 +419,7 @@ export default function Products() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-slate-300">{product.SKU || 'N/A'}</div>
+                        <div className="text-sm text-slate-300">{product.sku || 'N/A'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -451,18 +452,14 @@ export default function Products() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-emerald-400">
-                          ${product.price.toFixed(2)}
+                          {formatCurrency(product.price)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-slate-300">
-                          {(product as any).categories?.name || 'Uncategorized'}
-                        </div>
+                        <div className="text-sm text-slate-300">{product.categories?.name || 'Uncategorized'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-slate-300">
-                          {(product as any).suppliers?.name || 'Unknown'}
-                        </div>
+                        <div className="text-sm text-slate-300">{product.suppliers?.name || 'Unknown'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end space-x-2">
@@ -599,7 +596,7 @@ export default function Products() {
                   </label>
                   <input
                     type="text"
-                    {...register('SKU')}
+                    {...register('sku')}
                     className="mt-1 block w-full rounded-md bg-slate-700 border-slate-600 text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                   />
                 </div>

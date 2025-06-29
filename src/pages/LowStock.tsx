@@ -15,11 +15,9 @@ import {
   Download,
   Mail
 } from 'lucide-react';
+import { ProductsService, Product } from '../services/products';
 
-interface LowStockProduct {
-  id: string;
-  name: string;
-  category: string;
+interface LowStockProduct extends Product {
   currentStock: number;
   minStock: number;
   reorderPoint: number;
@@ -28,6 +26,7 @@ interface LowStockProduct {
   daysUntilStockout: number;
   priority: 'critical' | 'high' | 'medium' | 'low';
   image?: string;
+  category: string;
 }
 
 const LowStock = () => {
@@ -38,97 +37,41 @@ const LowStock = () => {
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
-  const loadData = () => {
+  const loadData = async () => {
     setIsLoading(true);
     
-    // Simulate API call delay
-    setTimeout(() => {
-      const mockProducts: LowStockProduct[] = [
-        {
-          id: '1',
-          name: 'Laptop Pro X',
-          category: 'Electronics',
-          currentStock: 5,
-          minStock: 20,
-          reorderPoint: 15,
-          supplier: 'TechCorp Inc.',
-          lastOrdered: '2024-01-15',
-          daysUntilStockout: 3,
-          priority: 'critical',
-          image: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=64&h=64&fit=crop'
-        },
-        {
-          id: '2',
-          name: 'Wireless Earbuds',
-          category: 'Audio',
-          currentStock: 12,
-          minStock: 25,
-          reorderPoint: 20,
-          supplier: 'AudioTech Solutions',
-          lastOrdered: '2024-01-10',
-          daysUntilStockout: 7,
-          priority: 'high',
-          image: 'https://images.unsplash.com/photo-1572569511254-d8f925fe2cbb?w=64&h=64&fit=crop'
-        },
-        {
-          id: '3',
-          name: 'Smart Watch Series 5',
-          category: 'Wearables',
-          currentStock: 8,
-          minStock: 15,
-          reorderPoint: 12,
-          supplier: 'WearableTech Co.',
-          lastOrdered: '2024-01-08',
-          daysUntilStockout: 5,
-          priority: 'high',
-          image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=64&h=64&fit=crop'
-        },
-        {
-          id: '4',
-          name: 'Gaming Console Pro',
-          category: 'Gaming',
-          currentStock: 3,
-          minStock: 10,
-          reorderPoint: 8,
-          supplier: 'GameTech Industries',
-          lastOrdered: '2024-01-12',
-          daysUntilStockout: 2,
-          priority: 'critical',
-          image: 'https://images.unsplash.com/photo-1486401899868-0e435ed85128?w=64&h=64&fit=crop'
-        },
-        {
-          id: '5',
-          name: 'Bluetooth Speaker',
-          category: 'Audio',
-          currentStock: 18,
-          minStock: 30,
-          reorderPoint: 25,
-          supplier: 'SoundMaster Ltd.',
-          lastOrdered: '2024-01-05',
-          daysUntilStockout: 12,
-          priority: 'medium',
-          image: 'https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=64&h=64&fit=crop'
-        },
-        {
-          id: '6',
-          name: 'Tablet Air',
-          category: 'Electronics',
-          currentStock: 6,
-          minStock: 18,
-          reorderPoint: 15,
-          supplier: 'TechCorp Inc.',
-          lastOrdered: '2024-01-14',
-          daysUntilStockout: 4,
-          priority: 'critical',
-          image: 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=64&h=64&fit=crop'
-        }
-      ];
+    try {
+      const productsData = await ProductsService.getLowStockProducts(50);
 
-      setProducts(mockProducts);
-      setFilteredProducts(mockProducts);
+      // Transform the API response to match our interface
+      const lowStockProducts: LowStockProduct[] = productsData.map((product: Product) => {
+        const daysUntilStockout = Math.ceil(product.quantity / 2); // Simple calculation
+        const priority = product.quantity <= 5 ? 'critical' : 
+                        product.quantity <= 10 ? 'high' : 
+                        product.quantity <= 15 ? 'medium' : 'low';
+        
+        return {
+          ...product,
+          currentStock: product.quantity,
+          minStock: product.low_stock_threshold,
+          reorderPoint: Math.ceil(product.low_stock_threshold * 1.5),
+          supplier: product.suppliers?.name || 'Unknown Supplier',
+          lastOrdered: product.updated_at || product.created_at,
+          daysUntilStockout,
+          priority,
+          category: product.categories?.name || 'Uncategorized',
+          image: `https://images.unsplash.com/photo-${Math.random().toString(36).substring(7)}?w=64&h=64&fit=crop`
+        };
+      });
+
+      setProducts(lowStockProducts);
+      setFilteredProducts(lowStockProducts);
       setLastRefreshed(new Date());
+    } catch (error) {
+      console.error('Error loading low stock data:', error);
+    } finally {
       setIsLoading(false);
-    }, 800);
+    }
   };
 
   useEffect(() => {

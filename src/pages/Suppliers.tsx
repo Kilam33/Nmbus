@@ -9,33 +9,28 @@ import {
   PhoneCall, Mail, Archive
 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
-import { supabase } from '../lib/supabase';
-import type { Database } from '../types/supabase';
+import { SuppliersService, Supplier } from '../services/suppliers';
+import { apiClient } from '../lib/api';
+import { safeToFixed } from '../utils/formatters';
 
 const supplierSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email address'),
   phone: z.string().min(1, 'Phone number is required'),
   address: z.string().min(1, 'Address is required'),
-  contactPerson: z.string().min(1, 'Contact person is required'),
-  avgLeadTime: z.number().min(1, 'Lead time must be at least 1 day'),
+  contact_person: z.string().min(1, 'Contact person is required'),
+  avg_lead_time: z.number().min(1, 'Lead time must be at least 1 day'),
 });
 
 type SupplierFormData = z.infer<typeof supplierSchema>;
-type Supplier = Database['public']['Tables']['suppliers']['Row'] & {
-  status: 'active' | 'inactive' | 'on-hold' | 'new';
-  reliabilityScore: number;
-  avgLeadTime: number;
-  lastOrderDate: string;
+type SupplierWithExtras = Supplier & {
   productsSupplied: number;
-  onTimeDeliveryRate: number;
-  contactPerson: string;
   code: string;
 };
 
 export default function Suppliers() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierWithExtras[]>([]);
+  const [filteredSuppliers, setFilteredSuppliers] = useState<SupplierWithExtras[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [reliabilityFilter, setReliabilityFilter] = useState<string>('all');
@@ -43,8 +38,8 @@ export default function Suppliers() {
     key: 'name',
     direction: 'ascending'
   });
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
-  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<SupplierWithExtras | null>(null);
+  const [editingSupplier, setEditingSupplier] = useState<SupplierWithExtras | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -70,7 +65,7 @@ export default function Suppliers() {
       result = result.filter(supplier =>
         supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         supplier.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        supplier.contactPerson.toLowerCase().includes(searchTerm.toLowerCase())
+        (supplier.contact_person && supplier.contact_person.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
@@ -81,59 +76,53 @@ export default function Suppliers() {
     if (reliabilityFilter !== 'all') {
       switch (reliabilityFilter) {
         case 'high':
-          result = result.filter(supplier => supplier.reliabilityScore >= 4.5);
+          result = result.filter(supplier => supplier.reliability_score >= 4.5);
           break;
         case 'medium':
-          result = result.filter(supplier => supplier.reliabilityScore >= 3.5 && supplier.reliabilityScore < 4.5);
+          result = result.filter(supplier => supplier.reliability_score >= 3.5 && supplier.reliability_score < 4.5);
           break;
         case 'low':
-          result = result.filter(supplier => supplier.reliabilityScore < 3.5);
+          result = result.filter(supplier => supplier.reliability_score < 3.5);
           break;
       }
     }
-
-    
 
     setFilteredSuppliers(result);
   }, [suppliers, searchTerm, statusFilter, reliabilityFilter, sortConfig]);
 
   const fetchSuppliers = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase.from('suppliers').select('*');
-    
-    if (error) {
+    try {
+      const response = await SuppliersService.getSuppliers();
+      
+      if (!response.success) {
+        console.error('Error fetching suppliers');
+        setIsLoading(false);
+        return;
+      }
+
+      const enhancedSuppliers = (response.data || []).map(supplier => ({
+        ...supplier,
+        productsSupplied: 0,
+        code: `SUP-${supplier.id.toString().padStart(4, '0')}`
+      }));
+
+      setSuppliers(enhancedSuppliers);
+      setFilteredSuppliers(enhancedSuppliers);
+      setLastRefreshed(new Date());
+    } catch (error) {
       console.error('Error fetching suppliers:', error);
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    const enhancedSuppliers = (data || []).map(supplier => ({
-      ...supplier,
-      status: 'active',
-      reliabilityScore: 4.0,
-      avgLeadTime: 5,
-      lastOrderDate: new Date().toISOString(),
-      productsSupplied: 0,
-      onTimeDeliveryRate: 90,
-      contactPerson: supplier.contactPerson || 'Not specified',
-      code: `SUP-${supplier.id.toString().padStart(4, '0')}`
-    }));
-
-    setSuppliers(enhancedSuppliers);
-    setFilteredSuppliers(enhancedSuppliers);
-    setIsLoading(false);
-    setLastRefreshed(new Date());
   };
 
   const onSubmit = async (data: SupplierFormData) => {
     try {
       if (editingSupplier) {
-        await supabase
-          .from('suppliers')
-          .update(data)
-          .eq('id', editingSupplier.id);
+        await SuppliersService.updateSupplier({ id: editingSupplier.id, ...data });
       } else {
-        await supabase.from('suppliers').insert([data]);
+        await SuppliersService.createSupplier(data);
       }
       await fetchSuppliers();
       reset();
@@ -144,20 +133,25 @@ export default function Suppliers() {
     }
   };
 
-  const handleEdit = (supplier: Supplier) => {
+  const handleEdit = (supplier: SupplierWithExtras) => {
     setEditingSupplier(supplier);
     Object.keys(supplier).forEach((key) => {
-      const value = supplier[key as keyof Supplier];
-      setValue(key as keyof SupplierFormData, value === null ? (typeof value === 'string' ? '' : 0) : value);
+      const value = supplier[key as keyof SupplierWithExtras];
+      if (value !== null && value !== undefined && (typeof value === 'string' || typeof value === 'number')) {
+        setValue(key as keyof SupplierFormData, value);
+      }
     });
     setIsModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this supplier?')) {
-      const { error } = await supabase.from('suppliers').delete().eq('id', id);
-      if (error) console.error('Error deleting supplier:', error);
-      else await fetchSuppliers();
+      try {
+        await SuppliersService.deleteSupplier(id);
+        await fetchSuppliers();
+      } catch (error) {
+        console.error('Error deleting supplier:', error);
+      }
     }
   };
 
@@ -371,28 +365,28 @@ export default function Suppliers() {
                       <th scope="col" className="px-4 py-3 text-left text-sm font-medium text-slate-400 tracking-wider">
                         <button
                           className="flex items-center font-medium text-white"
-                          onClick={() => requestSort('reliabilityScore')}
+                          onClick={() => requestSort('reliability_score')}
                         >
                           Reliability
-                          {getSortIcon('reliabilityScore')}
+                          {getSortIcon('reliability_score')}
                         </button>
                       </th>
                       <th scope="col" className="px-4 py-3 text-left text-sm font-medium text-slate-400 tracking-wider">
                         <button
                           className="flex items-center font-medium text-white"
-                          onClick={() => requestSort('avgLeadTime')}
+                          onClick={() => requestSort('avg_lead_time')}
                         >
                           Lead Time
-                          {getSortIcon('avgLeadTime')}
+                          {getSortIcon('avg_lead_time')}
                         </button>
                       </th>
                       <th scope="col" className="px-4 py-3 text-left text-sm font-medium text-slate-400 tracking-wider">
                         <button
                           className="flex items-center font-medium text-white"
-                          onClick={() => requestSort('lastOrderDate')}
+                          onClick={() => requestSort('last_order_date')}
                         >
                           Last Order
-                          {getSortIcon('lastOrderDate')}
+                          {getSortIcon('last_order_date')}
                         </button>
                       </th>
                       <th scope="col" className="px-4 py-3 text-right text-sm font-medium text-slate-400 tracking-wider">
@@ -454,21 +448,21 @@ export default function Suppliers() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-sm">
-                            <div className={`font-medium ${getReliabilityColor(supplier.reliabilityScore)}`}>
-                              {supplier.reliabilityScore.toFixed(1)}
+                            <div className={`font-medium ${getReliabilityColor(supplier.reliability_score)}`}>
+                              {safeToFixed(supplier.reliability_score)}
                             </div>
-                            <p className="text-xs text-slate-400">{supplier.onTimeDeliveryRate}% On-time</p>
+                            <p className="text-xs text-slate-400">{supplier.on_time_delivery_rate}% On-time</p>
                           </td>
                           <td className="px-4 py-3 text-sm">
                             <div className="flex items-center">
-                              <div className={`h-2 w-2 rounded-full ${getLeadTimeIndicator(supplier.avgLeadTime)} mr-2`}></div>
-                              <span>{supplier.avgLeadTime} days</span>
+                              <div className={`h-2 w-2 rounded-full ${getLeadTimeIndicator(supplier.avg_lead_time)} mr-2`}></div>
+                              <span>{supplier.avg_lead_time} days</span>
                             </div>
                           </td>
                           <td className="px-4 py-3 text-sm">
-                            <div>{formatDate(supplier.lastOrderDate)}</div>
+                            <div>{formatDate(supplier.last_order_date || supplier.created_at)}</div>
                             <p className="text-xs text-slate-400">
-                              {getDaysSinceLastOrder(supplier.lastOrderDate)} days ago
+                              {getDaysSinceLastOrder(supplier.last_order_date || supplier.created_at)} days ago
                             </p>
                           </td>
                           <td className="px-4 py-3 text-right text-sm">
@@ -550,7 +544,7 @@ export default function Suppliers() {
                     </div>
                     <div className="flex items-center">
                       <User className="h-4 w-4 text-slate-400 mr-2" />
-                      <p className="text-sm text-white">{selectedSupplier.contactPerson}</p>
+                      <p className="text-sm text-white">{selectedSupplier.contact_person}</p>
                     </div>
                   </div>
 
@@ -558,20 +552,20 @@ export default function Suppliers() {
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div className="bg-slate-700 rounded-md p-3">
                       <div className="text-xs text-slate-400 mb-1">Reliability Score</div>
-                      <div className={`text-lg font-bold ${getReliabilityColor(selectedSupplier.reliabilityScore)}`}>
-                        {selectedSupplier.reliabilityScore.toFixed(1)}
+                      <div className={`text-lg font-bold ${getReliabilityColor(selectedSupplier.reliability_score)}`}>
+                        {safeToFixed(selectedSupplier.reliability_score)}
                       </div>
                     </div>
                     <div className="bg-slate-700 rounded-md p-3">
                       <div className="text-xs text-slate-400 mb-1">On-Time Delivery</div>
                       <div className="text-lg font-bold text-white">
-                        {selectedSupplier.onTimeDeliveryRate}%
+                        {selectedSupplier.on_time_delivery_rate}%
                       </div>
                     </div>
                     <div className="bg-slate-700 rounded-md p-3">
                       <div className="text-xs text-slate-400 mb-1">Lead Time</div>
                       <div className="text-lg font-bold text-white">
-                        {selectedSupplier.avgLeadTime} days
+                        {selectedSupplier.avg_lead_time} days
                       </div>
                     </div>
                     <div className="bg-slate-700 rounded-md p-3">
@@ -664,12 +658,12 @@ export default function Suppliers() {
                       <label className="block text-sm text-slate-400 mb-1">Contact Person *</label>
                       <input
                         type="text"
-                        {...register('contactPerson')}
+                        {...register('contact_person')}
                         className="w-full py-2 px-3 bg-slate-700 border border-slate-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         placeholder="Enter contact person"
                       />
-                      {errors.contactPerson && (
-                        <p className="mt-1 text-sm text-red-400">{errors.contactPerson.message}</p>
+                      {errors.contact_person && (
+                        <p className="mt-1 text-sm text-red-400">{errors.contact_person.message}</p>
                       )}
                     </div>
                     <div>
@@ -711,13 +705,13 @@ export default function Suppliers() {
                       <label className="block text-sm text-slate-400 mb-1">Average Lead Time (days) *</label>
                       <input
                         type="number"
-                        {...register('avgLeadTime', { valueAsNumber: true })}
+                        {...register('avg_lead_time', { valueAsNumber: true })}
                         className="w-full py-2 px-3 bg-slate-700 border border-slate-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         placeholder="Enter lead time in days"
                         min="1"
                       />
-                      {errors.avgLeadTime && (
-                        <p className="mt-1 text-sm text-red-400">{errors.avgLeadTime.message}</p>
+                      {errors.avg_lead_time && (
+                        <p className="mt-1 text-sm text-red-400">{errors.avg_lead_time.message}</p>
                       )}
                     </div>
                   </div>

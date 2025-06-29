@@ -20,8 +20,25 @@ import {
   LogOut,
   ClipboardList
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { apiClient } from '../lib/api';
 import { toast } from 'react-hot-toast';
+
+interface UserData {
+  id: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ApiKeyResponse {
+  key: string;
+}
+
+interface AuthMeResponse {
+  user: UserData;
+}
 
 const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState('account');
@@ -32,7 +49,7 @@ const SettingsPage = () => {
   const [autoReorder, setAutoReorder] = useState(false);
   const [exportFormat, setExportFormat] = useState('csv');
   const [twoFactorAuth, setTwoFactorAuth] = useState(false);
-  const [session, setSession] = useState<any>(null);
+  const [user, setUser] = useState<UserData | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [storageUsage, setStorageUsage] = useState({
@@ -41,34 +58,46 @@ const SettingsPage = () => {
   });
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
+    const getUser = async () => {
+      try {
+        const response = await apiClient.get<AuthMeResponse>('/auth/me');
+        if (response.success) {
+          setUser(response.data.user);
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error);
+      }
     };
-    getSession();
+    getUser();
   }, []);
 
   const generateApiKey = async () => {
-    const { data, error } = await supabase.functions.invoke('generate-api-key');
-    if (error) {
+    try {
+      const response = await apiClient.post<ApiKeyResponse>('/auth/generate-api-key');
+      if (response.success) {
+        setApiKey(response.data.key);
+        toast.success('API key generated');
+      } else {
+        toast.error('Failed to generate API key');
+      }
+    } catch (error) {
       toast.error('Failed to generate API key');
-      return;
     }
-    setApiKey(data.key);
-    toast.success('API key generated');
   };
 
   const handleExportData = async () => {
-    toast.promise(
-      supabase.functions.invoke('export-data', {
-        body: { format: exportFormat },
-      }),
-      {
-        loading: 'Preparing your export...',
-        success: 'Export prepared! Download will start shortly.',
-        error: 'Failed to prepare export',
-      }
-    );
+    try {
+      toast.promise(
+        apiClient.post('/data/export', { format: exportFormat }),
+        {
+          loading: 'Preparing your export...',
+          success: 'Export prepared! Download will start shortly.',
+          error: 'Failed to prepare export',
+        }
+      );
+    } catch (error) {
+      toast.error('Failed to prepare export');
+    }
   };
 
   const tabs = [
@@ -126,7 +155,7 @@ const SettingsPage = () => {
                   <User className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <div className="ml-4">
-                  <p className="font-medium">{session?.user?.email}</p>
+                  <p className="font-medium">{user?.email}</p>
                   <button className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-500">
                     Change avatar
                   </button>
@@ -167,7 +196,7 @@ const SettingsPage = () => {
                   type="email"
                   id="email"
                   className="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white dark:bg-slate-800"
-                  defaultValue={session?.user?.email}
+                  defaultValue={user?.email}
                   disabled
                 />
               </div>
@@ -774,7 +803,7 @@ const SettingsPage = () => {
                   {[
                     {
                       name: 'You',
-                      email: session?.user?.email,
+                      email: user?.email,
                       role: 'Owner',
                       lastActive: 'Active now',
                     },

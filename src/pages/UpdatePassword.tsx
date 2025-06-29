@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { KeyRound, X, Check, XCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { supabase } from '../lib/supabase';
+import { apiClient } from '../lib/api';
 
 const RequirementItem = ({ met, text }: { met: boolean; text: string }) => (
   <div className="flex items-center text-sm">
@@ -49,22 +49,19 @@ export default function UpdatePassword() {
       }
 
       try {
-        // Verify the token with Supabase
-        const { data, error } = await supabase.auth.verifyOtp({
-          token_hash: token,
-          type: 'recovery',
-        });
+        // Verify the token with API
+        const response = await apiClient.post('/auth/verify-reset-token', { token });
 
-        if (error) {
-          console.error("Token verification failed:", error);
+        if (!response.success) {
+          console.error("Token verification failed:", response.error);
           setTokenError(true);
           setError('This password reset link has expired or is invalid. Please request a new one.');
           return;
         }
 
         // Check if user has OAuth provider
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user && user.app_metadata?.provider && user.app_metadata.provider !== 'email') {
+        const userResponse = await apiClient.get<{ user: any }>('/auth/me');
+        if (userResponse.success && userResponse.data?.user?.provider && userResponse.data.user.provider !== 'email') {
           setIsOAuthUser(true);
           return;
         }

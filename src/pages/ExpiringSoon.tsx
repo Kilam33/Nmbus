@@ -15,13 +15,11 @@ import {
   Mail,
   TrendingDown
 } from 'lucide-react';
+import { ProductsService, Product } from '../services/products';
+import { formatCurrency } from '../utils/formatters';
 
-interface ExpiringProduct {
-  id: string;
-  name: string;
-  category: string;
+interface ExpiringProduct extends Product {
   batchNumber: string;
-  quantity: number;
   expirationDate: string;
   daysUntilExpiry: number;
   supplier: string;
@@ -29,6 +27,7 @@ interface ExpiringProduct {
   priority: 'critical' | 'high' | 'medium' | 'low';
   image?: string;
   value: number;
+  category: string;
 }
 
 const ExpiringSoon = () => {
@@ -39,103 +38,45 @@ const ExpiringSoon = () => {
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
-  const loadData = () => {
+  const loadData = async () => {
     setIsLoading(true);
     
-    // Simulate API call delay
-    setTimeout(() => {
-      const mockProducts: ExpiringProduct[] = [
-        {
-          id: '1',
-          name: 'Organic Milk',
-          category: 'Dairy',
-          batchNumber: 'BATCH-001',
-          quantity: 50,
-          expirationDate: '2024-02-01',
-          daysUntilExpiry: 2,
-          supplier: 'FreshDairy Co.',
-          purchaseDate: '2024-01-15',
-          priority: 'critical',
-          image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=64&h=64&fit=crop',
-          value: 250.00
-        },
-        {
-          id: '2',
-          name: 'Fresh Bread',
-          category: 'Bakery',
-          batchNumber: 'BATCH-002',
-          quantity: 30,
-          expirationDate: '2024-02-03',
-          daysUntilExpiry: 4,
-          supplier: 'Artisan Bakery',
-          purchaseDate: '2024-01-20',
-          priority: 'critical',
-          image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=64&h=64&fit=crop',
-          value: 90.00
-        },
-        {
-          id: '3',
-          name: 'Yogurt Cups',
-          category: 'Dairy',
-          batchNumber: 'BATCH-003',
-          quantity: 100,
-          expirationDate: '2024-02-05',
-          daysUntilExpiry: 6,
-          supplier: 'FreshDairy Co.',
-          purchaseDate: '2024-01-18',
-          priority: 'high',
-          image: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=64&h=64&fit=crop',
-          value: 300.00
-        },
-        {
-          id: '4',
-          name: 'Fresh Vegetables',
-          category: 'Produce',
-          batchNumber: 'BATCH-004',
-          quantity: 25,
-          expirationDate: '2024-02-08',
-          daysUntilExpiry: 9,
-          supplier: 'GreenHarvest Farms',
-          purchaseDate: '2024-01-22',
-          priority: 'high',
-          image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=64&h=64&fit=crop',
-          value: 125.00
-        },
-        {
-          id: '5',
-          name: 'Canned Tomatoes',
-          category: 'Pantry',
-          batchNumber: 'BATCH-005',
-          quantity: 80,
-          expirationDate: '2024-02-15',
-          daysUntilExpiry: 16,
-          supplier: 'Pantry Essentials',
-          purchaseDate: '2024-01-10',
-          priority: 'medium',
-          image: 'https://images.unsplash.com/photo-1546094096-0df4bcaaa337?w=64&h=64&fit=crop',
-          value: 160.00
-        },
-        {
-          id: '6',
-          name: 'Frozen Pizza',
-          category: 'Frozen Foods',
-          batchNumber: 'BATCH-006',
-          quantity: 40,
-          expirationDate: '2024-02-20',
-          daysUntilExpiry: 21,
-          supplier: 'Frozen Delights',
-          purchaseDate: '2024-01-05',
-          priority: 'medium',
-          image: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=64&h=64&fit=crop',
-          value: 200.00
-        }
-      ];
+    try {
+      const productsData = await ProductsService.getExpiringProducts(30, 50);
 
-      setProducts(mockProducts);
-      setFilteredProducts(mockProducts);
+      // Transform the API response to match our interface
+      const expiringProducts: ExpiringProduct[] = productsData.map((product: Product) => {
+        // Calculate expiration date (mock calculation for now)
+        const expirationDate = new Date();
+        expirationDate.setDate(expirationDate.getDate() + Math.floor(Math.random() * 30) + 1);
+        
+        const daysUntilExpiry = Math.ceil((expirationDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+        const priority = daysUntilExpiry <= 3 ? 'critical' : 
+                        daysUntilExpiry <= 7 ? 'high' : 
+                        daysUntilExpiry <= 14 ? 'medium' : 'low';
+        
+        return {
+          ...product,
+          batchNumber: `BATCH-${product.id.substring(0, 8).toUpperCase()}`,
+          expirationDate: expirationDate.toISOString().split('T')[0],
+          daysUntilExpiry,
+          supplier: product.suppliers?.name || 'Unknown Supplier',
+          purchaseDate: product.created_at.split('T')[0],
+          priority,
+          category: product.categories?.name || 'Uncategorized',
+          value: product.price * product.quantity,
+          image: `https://images.unsplash.com/photo-${Math.random().toString(36).substring(7)}?w=64&h=64&fit=crop`
+        };
+      });
+
+      setProducts(expiringProducts);
+      setFilteredProducts(expiringProducts);
       setLastRefreshed(new Date());
+    } catch (error) {
+      console.error('Error loading expiring products:', error);
+    } finally {
       setIsLoading(false);
-    }, 800);
+    }
   };
 
   useEffect(() => {
@@ -257,7 +198,7 @@ const ExpiringSoon = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-yellow-400 text-sm font-medium">Total Value</p>
-                <p className="text-2xl font-bold text-yellow-400">${totalValue.toFixed(0)}</p>
+                <p className="text-2xl font-bold text-yellow-400">{formatCurrency(totalValue)}</p>
               </div>
               <Calendar className="h-8 w-8 text-yellow-400" />
             </div>
@@ -350,7 +291,7 @@ const ExpiringSoon = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-white">${product.value.toFixed(2)}</div>
+                      <div className="text-sm text-white">{formatCurrency(product.value)}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">

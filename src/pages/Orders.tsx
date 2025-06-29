@@ -10,19 +10,17 @@ import {
   Trash2
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { supabase } from '../lib/supabase';
-import type { Database } from '../types/supabase';
+import { OrdersService, Order } from '../services/orders';
+import { ProductsService, Product } from '../services/products';
+import { SuppliersService, Supplier } from '../services/suppliers';
+import { formatCurrency, safeNumber } from '../utils/formatters';
 
-// Enhanced Order type with Supabase relationships
-type Order = Database['public']['Tables']['orders']['Row'] & {
-  order_number: string;
+// Enhanced Order type with relationships
+type OrderWithDetails = Order & {
   customer: string;
   payment_method: string;
   shipping_method: string;
   items: number;
-  total: number;
-  products: Database['public']['Tables']['products']['Row'];
-  suppliers: Database['public']['Tables']['suppliers']['Row'];
   itemsDetails: Array<{
     id: string;
     name: string;
@@ -30,13 +28,15 @@ type Order = Database['public']['Tables']['orders']['Row'] & {
     price: number;
     sku: string | null;
   }>;
+  products: Product;
+  suppliers: Supplier;
 };
 
 const orderSchema = z.object({
   supplier_id: z.string().uuid('Supplier is required'),
   product_id: z.string().uuid('Product is required'),
   quantity: z.number().min(1, 'Quantity must be at least 1'),
-  status: z.enum(['pending', 'completed', 'cancelled', 'processing', 'shipped']),
+  status: z.enum(['pending', 'delivered', 'cancelled', 'processing', 'shipped']),
   customer: z.string().min(1, 'Customer is required'),
   payment_method: z.string().min(1, 'Payment method is required'),
   shipping_method: z.string().min(1, 'Shipping method is required'),
@@ -45,10 +45,10 @@ const orderSchema = z.object({
 type OrderFormData = z.infer<typeof orderSchema>;
 
 export default function Orders() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
-  const [products, setProducts] = useState<Database['public']['Tables']['products']['Row'][]>([]);
-  const [suppliers, setSuppliers] = useState<Database['public']['Tables']['suppliers']['Row'][]>([]);
+  const [orders, setOrders] = useState<OrderWithDetails[]>([]);
+  const [filteredOrders, setFilteredOrders] = useState<OrderWithDetails[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
@@ -56,8 +56,8 @@ export default function Orders() {
     key: 'created_at',
     direction: 'descending'
   });
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
+  const [editingOrder, setEditingOrder] = useState<OrderWithDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -100,7 +100,7 @@ export default function Orders() {
 
     // Apply sorting
     result.sort((a, b) => {
-      const key = sortConfig.key as keyof Order;
+      const key = sortConfig.key as keyof OrderWithDetails;
       let valueA = a[key];
       let valueB = b[key];
 
@@ -109,7 +109,16 @@ export default function Orders() {
         valueB = new Date(valueB as string).getTime();
       }
 
-      return 0;
+      // Handle undefined values
+      if (valueA === undefined && valueB === undefined) return 0;
+      if (valueA === undefined) return sortConfig.direction === 'ascending' ? -1 : 1;
+      if (valueB === undefined) return sortConfig.direction === 'ascending' ? 1 : -1;
+
+      if (sortConfig.direction === 'ascending') {
+        return valueA < valueB ? -1 : valueA > valueB ? 1 : 0;
+      } else {
+        return valueA > valueB ? -1 : valueA < valueB ? 1 : 0;
+      }
     });
 
     setFilteredOrders(result);
@@ -118,30 +127,39 @@ export default function Orders() {
   const fetchOrders = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          products (*),
-          suppliers (*)
-        `)
-        .order('created_at', { ascending: false });
+      const response = await OrdersService.getOrders();
+      
+      if (!response.success) {
+        console.error('Error fetching orders');
+        return;
+      }
 
-      if (error) throw error;
-
-      const enhancedOrders = data.map(order => ({
-        ...order,
-        order_number: `ORD-${order.id.substring(0, 8).toUpperCase()}`,
-        items: order.quantity,
-        total: (order.products as Database['public']['Tables']['products']['Row']).price * order.quantity,
-        itemsDetails: [{
-          id: order.product_id,
-          name: (order.products as Database['public']['Tables']['products']['Row']).name,
-          quantity: order.quantity,
-          price: (order.products as Database['public']['Tables']['products']['Row']).price,
-          sku: (order.products as Database['public']['Tables']['products']['Row']).SKU
-        }]
-      })) as Order[];
+      const enhancedOrders = await Promise.all((response.data || []).map(async (order) => {
+        const productResponse = await ProductsService.getProduct(order.product_id);
+        const supplierResponse = await SuppliersService.getSupplier(order.supplier_id);
+        
+        const product = productResponse.success ? productResponse.data : null;
+        const supplier = supplierResponse.success ? supplierResponse.data : null;
+        
+        return {
+          ...order,
+          order_number: `ORD-${order.id.substring(0, 8).toUpperCase()}`,
+          items: order.quantity,
+          total: (product?.price || 0) * order.quantity,
+          itemsDetails: [{
+            id: order.product_id,
+            name: product?.name || 'Unknown Product',
+            quantity: order.quantity,
+            price: product?.price || 0,
+            sku: product?.sku || null
+          }],
+          customer: 'Customer Name', // Default value since Order interface doesn't have this
+          payment_method: 'Credit Card', // Default value
+          shipping_method: 'Standard', // Default value
+          products: product || {} as Product,
+          suppliers: supplier || {} as Supplier
+        } as OrderWithDetails;
+      }));
 
       setOrders(enhancedOrders);
       setFilteredOrders(enhancedOrders);
@@ -154,29 +172,37 @@ export default function Orders() {
   };
 
   const fetchProducts = async () => {
-    const { data, error } = await supabase.from('products').select('*');
-    if (error) console.error('Error fetching products:', error);
-    else setProducts(data || []);
+    try {
+      const response = await ProductsService.getProducts();
+      if (response.success) {
+        setProducts(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    }
   };
 
   const fetchSuppliers = async () => {
-    const { data, error } = await supabase.from('suppliers').select('*');
-    if (error) console.error('Error fetching suppliers:', error);
-    else setSuppliers(data || []);
+    try {
+      const response = await SuppliersService.getSuppliers();
+      if (response.success) {
+        setSuppliers(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+    }
   };
 
   const onSubmit = async (data: OrderFormData) => {
     try {
       if (editingOrder) {
-        await supabase
-          .from('orders')
-          .update(data)
-          .eq('id', editingOrder.id);
+        await OrdersService.updateOrder({ id: editingOrder.id, ...data });
       } else {
-        await supabase.from('orders').insert([{
-          ...data,
-          total: (products.find(p => p.id === data.product_id)?.price || 0) * data.quantity
-        }]);
+        await OrdersService.createOrder({
+          supplier_id: data.supplier_id,
+          product_id: data.product_id,
+          quantity: data.quantity
+        });
       }
       await fetchOrders();
       reset();
@@ -187,7 +213,7 @@ export default function Orders() {
     }
   };
 
-  const handleEdit = (order: Order) => {
+  const handleEdit = (order: OrderWithDetails) => {
     setEditingOrder(order);
     setValue('product_id', order.product_id);
     setValue('supplier_id', order.supplier_id);
@@ -201,9 +227,12 @@ export default function Orders() {
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this order?')) {
-      const { error } = await supabase.from('orders').delete().eq('id', id);
-      if (error) console.error('Error deleting order:', error);
-      else await fetchOrders();
+      try {
+        await OrdersService.deleteOrder(id);
+        await fetchOrders();
+      } catch (error) {
+        console.error('Error deleting order:', error);
+      }
     }
   };
 
@@ -217,7 +246,7 @@ export default function Orders() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'completed': return <CheckCircle className="h-4 w-4 text-emerald-400" />;
+      case 'delivered': return <CheckCircle className="h-4 w-4 text-emerald-400" />;
       case 'pending': return <Clock className="h-4 w-4 text-amber-400" />;
       case 'cancelled': return <XCircle className="h-4 w-4 text-rose-400" />;
       case 'processing': return <RefreshCw className="h-4 w-4 text-blue-400 animate-spin" />;
@@ -228,7 +257,7 @@ export default function Orders() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'bg-emerald-900/30 text-emerald-400';
+      case 'delivered': return 'bg-emerald-900/30 text-emerald-400';
       case 'pending': return 'bg-amber-900/30 text-amber-400';
       case 'cancelled': return 'bg-rose-900/30 text-rose-400';
       case 'processing': return 'bg-blue-900/30 text-blue-400';
@@ -340,7 +369,7 @@ export default function Orders() {
                 <option value="pending">Pending</option>
                 <option value="processing">Processing</option>
                 <option value="shipped">Shipped</option>
-                <option value="completed">Completed</option>
+                <option value="delivered">Delivered</option>
                 <option value="cancelled">Cancelled</option>
               </select>
             </div>
@@ -473,7 +502,7 @@ export default function Orders() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-emerald-400">
-                            ${order.total.toFixed(2)}
+                            {formatCurrency(order.total)}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -567,9 +596,9 @@ export default function Orders() {
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">{item.name}</td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-400">{item.sku || 'N/A'}</td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">{item.quantity}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">${item.price.toFixed(2)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">{formatCurrency(item.price)}</td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-emerald-400">
-                              ${(item.quantity * item.price).toFixed(2)}
+                              {formatCurrency(item.quantity * safeNumber(item.price))}
                             </td>
                           </tr>
                         ))}
@@ -582,7 +611,7 @@ export default function Orders() {
                   <div className="bg-slate-700/50 p-4 rounded-lg w-full md:w-1/3">
                     <div className="flex justify-between mb-2">
                       <span className="text-slate-400">Subtotal:</span>
-                      <span className="text-slate-300">${selectedOrder.total.toFixed(2)}</span>
+                      <span className="text-slate-300">{formatCurrency(selectedOrder.total)}</span>
                     </div>
                     <div className="flex justify-between mb-2">
                       <span className="text-slate-400">Shipping:</span>
@@ -590,7 +619,7 @@ export default function Orders() {
                     </div>
                     <div className="flex justify-between font-medium text-lg">
                       <span className="text-white">Total:</span>
-                      <span className="text-emerald-400">${selectedOrder.total.toFixed(2)}</span>
+                      <span className="text-emerald-400">{formatCurrency(selectedOrder.total)}</span>
                     </div>
                   </div>
                 </div>
@@ -643,7 +672,7 @@ export default function Orders() {
                       <option value="">Select a product</option>
                       {products.map((product) => (
                         <option key={product.id} value={product.id}>
-                          {product.name} (${product.price.toFixed(2)})
+                          {product.name} ({formatCurrency(product.price)})
                         </option>
                       ))}
                     </select>
@@ -718,7 +747,7 @@ export default function Orders() {
                       <option value="pending">Pending</option>
                       <option value="processing">Processing</option>
                       <option value="shipped">Shipped</option>
-                      <option value="completed">Completed</option>
+                      <option value="delivered">Delivered</option>
                       <option value="cancelled">Cancelled</option>
                     </select>
                     {errors.status && (

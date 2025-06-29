@@ -9,9 +9,10 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, 
   ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell 
 } from 'recharts';
-import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import StatCard from '../components/ui/StatCard';
+import { analyticsService, DashboardStats, OrderStats, TopProduct, CategoryBreakdown, InventoryTrend, OrderTrend } from '../services/analytics';
+import { ProductsService, Product } from '../services/products';
 
 interface AlertProps {
   id: number;
@@ -84,7 +85,7 @@ interface DashboardData {
     name: string;
     sold: number;
     revenue: number;
-    inStock: number;
+    in_stock: number;
   }[];
   recentOrders: OrderProps[];
   orderStats: {
@@ -225,63 +226,28 @@ const Dashboard: React.FC = () => {
     try {
       setIsLoading(true);
       
-      // Fetch total counts
-      const [
-        { count: productsCount },
-        { count: categoriesCount },
-        { count: suppliersCount },
-        { count: ordersCount },
-        { count: lowStockCount },
-        { data: revenueData },
-      ] = await Promise.all([
-        supabase.from('products').select('*', { count: 'exact' }),
-        supabase.from('categories').select('*', { count: 'exact' }),
-        supabase.from('suppliers').select('*', { count: 'exact' }),
-        supabase.from('orders').select('*', { count: 'exact' }),
-        supabase.from('products').select('*', { count: 'exact' }).lt('quantity', 10),
-        supabase.from('orders').select('total_amount').eq('status', 'completed'),
-      ]);
-
-      // Calculate revenue and change
-      const revenue = revenueData?.reduce((sum, order) => sum + order.total_amount, 0) || 0;
-      const revenueChange = 12.5; // This would normally come from your data
-
-      // Fetch orders by status
-      const { data: orderStatusData } = await supabase
-        .from('orders')
-        .select('status');
-
-      let ordersByStatus: { status: string; count: number }[] = [];
-      if (orderStatusData) {
-        const counts: Record<string, number> = {};
-        orderStatusData.forEach(order => {
-          counts[order.status] = (counts[order.status] || 0) + 1;
-        });
-        ordersByStatus = Object.entries(counts).map(([status, count]) => ({
-          status,
-          count,
-        }));
-      }
-
-      // Fetch products by category
-      const { data: categoryData } = await supabase
-        .from('products')
-        .select('categories (name)');
-
-      let productsByCategory: { category: string; count: number }[] = [];
-      if (categoryData) {
-        const counts: Record<string, number> = {};
-        categoryData.forEach((product: any) => {
-          const categoryName = product.categories?.name || 'Uncategorized';
-          counts[categoryName] = (counts[categoryName] || 0) + 1;
-        });
-        productsByCategory = Object.entries(counts).map(([category, count]) => ({
-          category,
-          count,
-        }));
-      }
-
-      // Mock data for other sections (replace with actual Supabase queries as needed)
+      // Fetch dashboard statistics from analytics service
+      const dashboardStats = await analyticsService.getDashboardStats();
+      
+      // Fetch order statistics
+      const orderStats = await analyticsService.getOrderStats();
+      
+      // Fetch category breakdown
+      const categoryBreakdown = await analyticsService.getCategoryBreakdown();
+      
+      // Fetch top selling products
+      const topProducts = await analyticsService.getTopProducts(10);
+      
+      // Fetch inventory trends
+      const inventoryTrends = await analyticsService.getInventoryTrends();
+      
+      // Fetch order trends
+      const orderTrends = await analyticsService.getOrderTrends();
+      
+      // Fetch low stock products
+      const lowStockProducts = await ProductsService.getLowStockProducts(10);
+      
+      // Mock data for sections not yet implemented in backend
       const recentAlerts = [
         { id: 1, message: 'Laptop XPS 15 stock below threshold', severity: 'high' as const, timestamp: '30 min ago' },
         { id: 2, message: 'Order #4592 awaiting approval', severity: 'medium' as const, timestamp: '2 hours ago' },
@@ -293,67 +259,74 @@ const Dashboard: React.FC = () => {
         { id: 2, product: 'Smartphone Galaxy S24', quantity: 100, expectedDate: '2024-04-20', supplier: 'Samsung', status: 'Processing' },
       ];
 
-      const inventoryTrends = [
-        { name: 'Jan', products: 200, revenue: 15000 },
-        { name: 'Feb', products: 220, revenue: 18000 },
-        { name: 'Mar', products: 246, revenue: 24567 },
-      ];
-
-      const categoryBreakdown = [
-        { name: 'Electronics', value: 45, color: '#8b5cf6' },
-        { name: 'Accessories', value: 25, color: '#22d3ee' },
-        { name: 'Peripherals', value: 15, color: '#FDBD01' },
-      ];
-
-      const lowStockInventory = [
-        { id: 1, name: 'Laptop XPS 15', sku: 'LAP-XPS-15', quantity: 5, threshold: 20, category: 'Electronics', location: 'Warehouse A' },
-        { id: 2, name: 'Wireless Mouse MX', sku: 'ACC-MX-001', quantity: 8, threshold: 30, category: 'Accessories', location: 'Warehouse B' },
-      ];
-
-      const topSellingProducts = [
-        { id: 1, name: 'Smartphone Galaxy S23', sold: 120, revenue: 96000, inStock: 85 },
-        { id: 2, name: 'Wireless Earbuds Pro', sold: 200, revenue: 36000, inStock: 150 },
-      ];
-
       const recentOrders = [
-        { id: 1, orderNumber: 'ORD-12345', customer: 'John Doe', status: 'pending', total: 150, items: 3, date: '2024-04-10', priority: 'medium' },
-        { id: 2, orderNumber: 'ORD-12346', customer: 'Jane Smith', status: 'processing', total: 200, items: 4, date: '2024-04-11', priority: 'high' },
-        { id: 3, orderNumber: 'ORD-12347', customer: 'Bob Johnson', status: 'shipped', total: 100, items: 2, date: '2024-04-12', priority: 'low' },
+        { id: 1, orderNumber: 'ORD-12345', customer: 'John Doe', status: 'pending' as const, total: 150, items: 3, date: '2024-04-10', priority: 'medium' as const },
+        { id: 2, orderNumber: 'ORD-12346', customer: 'Jane Smith', status: 'processing' as const, total: 200, items: 4, date: '2024-04-11', priority: 'high' as const },
+        { id: 3, orderNumber: 'ORD-12347', customer: 'Bob Johnson', status: 'shipped' as const, total: 100, items: 2, date: '2024-04-12', priority: 'low' as const },
       ];
 
-      const orderStats = {
-        pending: 5,
-        processing: 3,
-        shipped: 2,
-        delivered: 1,
-        cancelled: 0
-      };
+      // Transform low stock products to match interface
+      const lowStockInventory: InventoryItemProps[] = lowStockProducts.map((product: Product, index: number) => ({
+        id: index + 1,
+        name: product.name,
+        sku: product.sku || 'N/A',
+        quantity: product.quantity,
+        threshold: product.low_stock_threshold,
+        category: product.categories?.name || 'Uncategorized',
+        location: 'Warehouse A', // Mock location since it's not in Product interface
+      }));
 
-      const orderTrends = [
-        { name: 'Jan', orders: 10, revenue: 1000 },
-        { name: 'Feb', orders: 12, revenue: 1200 },
-        { name: 'Mar', orders: 15, revenue: 1500 },
+      // Transform top products to match interface
+      const topSellingProducts = topProducts.map((product, index) => ({
+        id: index + 1,
+        name: product.name,
+        sold: product.sold,
+        revenue: product.revenue,
+        in_stock: product.in_stock,
+      }));
+
+      // Transform order stats to match interface
+      const ordersByStatus = [
+        { status: 'pending', count: orderStats.pending },
+        { status: 'processing', count: orderStats.processing },
+        { status: 'shipped', count: orderStats.shipped },
+        { status: 'delivered', count: orderStats.delivered },
+        { status: 'cancelled', count: orderStats.cancelled },
       ];
+
+      // Transform products by category (simplified for now)
+      const productsByCategory = categoryBreakdown.map(cat => ({
+        category: cat.name,
+        count: Math.round(cat.value / 10), // Rough estimate
+      }));
 
       setDashboardData({
-        totalProducts: productsCount || 0,
-        totalCategories: categoriesCount || 0,
-        totalSuppliers: suppliersCount || 0,
-        totalOrders: ordersCount || 0,
-        revenue,
-        lowStockItems: lowStockCount || 0,
-        revenueChange,
+        totalProducts: dashboardStats.totalProducts,
+        totalCategories: dashboardStats.totalCategories,
+        totalSuppliers: dashboardStats.totalSuppliers,
+        totalOrders: dashboardStats.totalOrders,
+        revenue: dashboardStats.revenue,
+        lowStockItems: dashboardStats.lowStockItems,
+        revenueChange: dashboardStats.revenueChange,
         ordersByStatus,
         productsByCategory,
         recentAlerts,
         upcomingShipments,
-        inventoryTrends,
+        inventoryTrends: inventoryTrends.map(trend => ({
+          name: trend.name,
+          products: trend.products,
+          revenue: trend.revenue,
+        })),
         categoryBreakdown,
         lowStockInventory,
         topSellingProducts,
         recentOrders,
         orderStats,
-        orderTrends
+        orderTrends: orderTrends.map(trend => ({
+          name: trend.name,
+          orders: trend.orders,
+          revenue: trend.revenue,
+        }))
       });
 
       setLastRefreshed(new Date());
@@ -765,7 +738,7 @@ const Dashboard: React.FC = () => {
                           <td className="py-3 text-slate-200">{product.name}</td>
                           <td className="py-3 text-slate-200">{product.sold}</td>
                           <td className="py-3 text-emerald-400">${product.revenue.toLocaleString()}</td>
-                          <td className="py-3 text-slate-200">{product.inStock}</td>
+                          <td className="py-3 text-slate-200">{product.in_stock}</td>
                         </tr>
                       ))}
                     </tbody>

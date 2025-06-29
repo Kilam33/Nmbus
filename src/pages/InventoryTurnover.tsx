@@ -33,6 +33,7 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react';
+import { safeToFixed } from '../utils/formatters';
 
 interface TurnoverData {
   month: string;
@@ -314,7 +315,7 @@ const InventoryTurnover = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-indigo-400 text-sm font-medium">Avg Turnover Rate</p>
-                <p className="text-2xl font-bold text-indigo-400">{avgTurnoverRate.toFixed(1)}x</p>
+                <p className="text-2xl font-bold text-indigo-400">{safeToFixed(avgTurnoverRate, 1)}x</p>
                 <p className="text-xs text-indigo-400 mt-1">Per year</p>
               </div>
               <Zap className="h-8 w-8 text-indigo-400" />
