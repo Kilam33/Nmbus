@@ -64,7 +64,7 @@ export default function Products() {
       setLoading(true);
       setError(null);
 
-      const response = await ProductsService.getProducts();
+      const response = await ProductsService.getProducts({ limit: 1000 });
       
       if (!response.success) throw new Error('Error fetching products');
       

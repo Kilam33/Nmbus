@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import { createClient } from 'redis';
+import cron from 'node-cron';
 
 import { config } from '@/config/app.config';
 import { logger } from '@/utils/logger';
@@ -13,6 +14,7 @@ import { notFoundHandler } from '@/middleware/notFound.middleware';
 import { rateLimitMiddleware } from '@/middleware/rateLimit.middleware';
 import { metricsMiddleware } from '@/middleware/metrics.middleware';
 import { setupSwagger } from '@/config/swagger.config';
+import { reorderService } from '@/services/reorder.service';
 
 // Route imports
 import authRoutes from '@/api/v1/auth';
@@ -22,10 +24,12 @@ import suppliersRoutes from '@/api/v1/suppliers';
 import ordersRoutes from '@/api/v1/orders';
 import analyticsRoutes from '@/api/v1/analytics';
 import healthRoutes from '@/api/v1/health';
+import reorderRoutes from '@/api/v1/reorder';
 
 class Server {
   private app: Express;
   public redisClient: any;
+  public scheduledJobs: cron.ScheduledTask[] = [];
 
   constructor() {
     this.app = express();
@@ -34,6 +38,7 @@ class Server {
     this.initializeRoutes();
     this.initializeErrorHandling();
     this.initializeSwagger();
+    this.initializeScheduledJobs();
   }
 
   private async initializeRedis(): Promise<void> {
@@ -171,6 +176,7 @@ class Server {
     this.app.use(`${apiPrefix}/suppliers`, suppliersRoutes);
     this.app.use(`${apiPrefix}/orders`, ordersRoutes);
     this.app.use(`${apiPrefix}/analytics`, analyticsRoutes);
+    this.app.use(`${apiPrefix}/reorder`, reorderRoutes);
 
     // Root route
     this.app.get('/', (req, res) => {
@@ -192,12 +198,107 @@ class Server {
     setupSwagger(this.app);
   }
 
+  private initializeScheduledJobs(): void {
+    // Schedule automatic reorder analysis
+    this.scheduleReorderAnalysis();
+    
+    logger.info('Scheduled jobs initialized');
+  }
+
+  private scheduleReorderAnalysis(): void {
+    // Run every hour by default, but will be adjusted based on settings
+    const reorderAnalysisJob = cron.schedule('0 * * * *', async () => {
+      try {
+        logger.info('Starting scheduled reorder analysis');
+        
+        // Get current settings
+        const settings = await reorderService.getSettings();
+        
+        if (!settings.auto_reorder_enabled) {
+          logger.debug('Auto reorder is disabled, skipping scheduled analysis');
+          return;
+        }
+
+        // Start analysis for all products
+        await reorderService.startAnalysis({
+          userId: 'system', // System user for automated jobs
+          scope: 'all',
+          urgencyOnly: false
+        });
+
+        logger.info('Scheduled reorder analysis completed');
+      } catch (error) {
+        logger.error('Scheduled reorder analysis failed', {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }, {
+      scheduled: false // Don't start immediately
+    });
+
+    // Start the job
+    reorderAnalysisJob.start();
+    this.scheduledJobs.push(reorderAnalysisJob);
+
+    // Schedule settings-based analysis frequency updates
+    const settingsUpdateJob = cron.schedule('0 */6 * * *', async () => {
+      try {
+        const settings = await reorderService.getSettings();
+        const frequencyHours = settings.analysis_frequency_hours || 24;
+        
+        // Convert hours to cron expression (simplified - runs every hour if frequency is 1, every 6 hours if 6, etc.)
+        const cronExpression = frequencyHours <= 1 ? '0 * * * *' : 
+                              frequencyHours <= 6 ? '0 */6 * * *' : 
+                              frequencyHours <= 12 ? '0 */12 * * *' : '0 0 * * *';
+        
+        // Restart job with new frequency
+        reorderAnalysisJob.stop();
+        
+        const newJob = cron.schedule(cronExpression, async () => {
+          try {
+            logger.info('Starting scheduled reorder analysis (frequency-based)');
+            
+            const currentSettings = await reorderService.getSettings();
+            if (!currentSettings.auto_reorder_enabled) {
+              return;
+            }
+
+            await reorderService.startAnalysis({
+              userId: 'system',
+              scope: 'all',
+              urgencyOnly: false
+            });
+
+            logger.info('Scheduled reorder analysis completed');
+          } catch (error) {
+            logger.error('Scheduled reorder analysis failed', {
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        });
+        
+        newJob.start();
+        this.scheduledJobs.push(newJob);
+        
+        logger.info(`Updated reorder analysis schedule to run every ${frequencyHours} hours`);
+      } catch (error) {
+        logger.error('Failed to update reorder analysis schedule', {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    });
+
+    settingsUpdateJob.start();
+    this.scheduledJobs.push(settingsUpdateJob);
+  }
+
   public start(): void {
     this.app.listen(config.port, () => {
       logger.info(`🚀 NIMBUS API Server running on port ${config.port}`);
       logger.info(`📝 API Documentation: http://localhost:${config.port}/api-docs`);
       logger.info(`🔍 Health Check: http://localhost:${config.port}/api/${config.apiVersion}/health`);
       logger.info(`🌍 Environment: ${config.nodeEnv}`);
+      logger.info(`⏰ Scheduled jobs: ${this.scheduledJobs.length} active`);
     });
   }
 
@@ -213,6 +314,12 @@ server.start();
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  
+  // Stop all scheduled jobs
+  server.scheduledJobs.forEach(job => {
+    job.stop();
+  });
+  
   if (global.redisClient) {
     await global.redisClient.disconnect();
   }
@@ -221,6 +328,12 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
+  
+  // Stop all scheduled jobs
+  server.scheduledJobs.forEach(job => {
+    job.stop();
+  });
+  
   if (global.redisClient) {
     await global.redisClient.disconnect();
   }
