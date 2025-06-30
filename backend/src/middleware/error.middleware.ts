@@ -5,7 +5,7 @@ import { ApiResponse } from '@/types';
 export class AppError extends Error {
   public statusCode: number;
   public isOperational: boolean;
-  public code?: string;
+  public code?: string | undefined;
   public details?: any;
 
   constructor(message: string, statusCode: number = 500, code?: string, details?: any) {
@@ -108,19 +108,28 @@ export const errorHandler = (
   }
 
   // Handle PostgreSQL errors
-  if (error.code === '23505') {
+  if (
+    (error instanceof AppError && error.code === '23505') ||
+    (!(error instanceof AppError) && (error as any).code === '23505')
+  ) {
     statusCode = 409;
     message = 'Resource already exists';
     code = 'DUPLICATE_RESOURCE';
   }
 
-  if (error.code === '23503') {
+  if (
+    (error instanceof AppError && error.code === '23503') ||
+    (!(error instanceof AppError) && (error as any).code === '23503')
+  ) {
     statusCode = 400;
     message = 'Foreign key constraint violation';
     code = 'FOREIGN_KEY_ERROR';
   }
 
-  if (error.code === '23502') {
+  if (
+    (error instanceof AppError && error.code === '23502') ||
+    (!(error instanceof AppError) && (error as any).code === '23502')
+  ) {
     statusCode = 400;
     message = 'Required field missing';
     code = 'REQUIRED_FIELD_MISSING';

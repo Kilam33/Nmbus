@@ -159,7 +159,8 @@ export const getMetrics = async (req: Request, res: Response) => {
     const metrics = await register.metrics();
     res.end(metrics);
   } catch (error) {
-    logger.error('Failed to generate metrics', { error: error.message });
+    const errMsg = error instanceof Error ? error.message : String(error);
+    logger.error('Failed to generate metrics', { error: errMsg });
     res.status(500).json({
       success: false,
       error: {

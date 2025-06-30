@@ -43,7 +43,7 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
     logger.error('Database query error:', {
       query: text,
       params,
-      error: error.message
+      error: error instanceof Error ? error.message : String(error)
     });
     throw error;
   } finally {
