@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Package, DollarSign, ShoppingCart, TrendingUp, AlertTriangle, 
   Truck, BarChart2, Calendar, Clock, Settings, Search, Filter, 
@@ -13,6 +14,7 @@ import { toast } from 'react-hot-toast';
 import StatCard from '../components/ui/StatCard';
 import { analyticsService, DashboardStats, OrderStats, TopProduct, CategoryBreakdown, InventoryTrend, OrderTrend } from '../services/analytics';
 import { ProductsService, Product } from '../services/products';
+import { OrdersService } from '../services/orders';
 
 interface AlertProps {
   id: number;
@@ -189,6 +191,7 @@ const Order: React.FC<{ order: OrderProps }> = ({ order }) => {
 };
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     totalProducts: 0,
     totalCategories: 0,
@@ -226,43 +229,60 @@ const Dashboard: React.FC = () => {
     try {
       setIsLoading(true);
       
-      // Fetch dashboard statistics from analytics service
-      const dashboardStats = await analyticsService.getDashboardStats();
+      // Convert selectedView to API period format
+      const periodMap: Record<string, 'daily' | 'weekly' | 'monthly' | 'yearly'> = {
+        'daily': 'daily',
+        'weekly': 'weekly', 
+        'monthly': 'monthly'
+      };
+      const period = periodMap[selectedView] || 'monthly';
       
-      // Fetch order statistics
-      const orderStats = await analyticsService.getOrderStats();
+      // Fetch all dashboard data from analytics service
+      const [
+        dashboardStats,
+        orderStats,
+        categoryBreakdown,
+        topProducts,
+        inventoryTrends,
+        orderTrends,
+        lowStockProducts,
+        recentOrdersResponse
+      ] = await Promise.all([
+        analyticsService.getDashboardStats(),
+        analyticsService.getOrderStats(),
+        analyticsService.getCategoryBreakdown(),
+        analyticsService.getTopProducts(10),
+        analyticsService.getInventoryTrends({ period }),
+        analyticsService.getOrderTrends({ period }),
+        ProductsService.getLowStockProducts(10),
+        OrdersService.getOrders({ limit: 10 })
+      ]);
       
-      // Fetch category breakdown
-      const categoryBreakdown = await analyticsService.getCategoryBreakdown();
+      // Generate alerts based on real data
+      const recentAlerts: AlertProps[] = [];
       
-      // Fetch top selling products
-      const topProducts = await analyticsService.getTopProducts(10);
-      
-      // Fetch inventory trends
-      const inventoryTrends = await analyticsService.getInventoryTrends();
-      
-      // Fetch order trends
-      const orderTrends = await analyticsService.getOrderTrends();
-      
-      // Fetch low stock products
-      const lowStockProducts = await ProductsService.getLowStockProducts(10);
-      
-      // Mock data for sections not yet implemented in backend
-      const recentAlerts = [
-        { id: 1, message: 'Laptop XPS 15 stock below threshold', severity: 'high' as const, timestamp: '30 min ago' },
-        { id: 2, message: 'Order #4592 awaiting approval', severity: 'medium' as const, timestamp: '2 hours ago' },
-        { id: 3, message: 'Weekly inventory report ready', severity: 'low' as const, timestamp: '5 hours ago' },
-      ];
+      if (lowStockProducts.length > 0) {
+        recentAlerts.push({
+          id: 1,
+          message: `${lowStockProducts.length} products below stock threshold`,
+          severity: 'high',
+          timestamp: '30 min ago'
+        });
+      }
 
-      const upcomingShipments = [
+      if (orderStats.pending > 5) {
+        recentAlerts.push({
+          id: 2,
+          message: `${orderStats.pending} orders awaiting processing`,
+          severity: 'medium',
+          timestamp: '2 hours ago'
+        });
+      }
+
+      // Generate mock shipments (since we don't have shipment data yet)
+      const upcomingShipments: ShipmentProps[] = [
         { id: 1, product: 'Laptop XPS 15', quantity: 50, expectedDate: '2024-04-15', supplier: 'Dell Inc.', status: 'In Transit' },
         { id: 2, product: 'Smartphone Galaxy S24', quantity: 100, expectedDate: '2024-04-20', supplier: 'Samsung', status: 'Processing' },
-      ];
-
-      const recentOrders = [
-        { id: 1, orderNumber: 'ORD-12345', customer: 'John Doe', status: 'pending' as const, total: 150, items: 3, date: '2024-04-10', priority: 'medium' as const },
-        { id: 2, orderNumber: 'ORD-12346', customer: 'Jane Smith', status: 'processing' as const, total: 200, items: 4, date: '2024-04-11', priority: 'high' as const },
-        { id: 3, orderNumber: 'ORD-12347', customer: 'Bob Johnson', status: 'shipped' as const, total: 100, items: 2, date: '2024-04-12', priority: 'low' as const },
       ];
 
       // Transform low stock products to match interface
@@ -285,6 +305,18 @@ const Dashboard: React.FC = () => {
         in_stock: product.in_stock,
       }));
 
+      // Transform recent orders to match interface
+      const recentOrders: OrderProps[] = recentOrdersResponse.data?.map((order: any, index: number) => ({
+        id: index + 1,
+        orderNumber: order.order_number,
+        customer: order.customer || order.supplier_name || 'Unknown',
+        status: order.status as any,
+        total: order.total,
+        items: order.quantity,
+        date: new Date(order.created_at).toLocaleDateString(),
+        priority: Math.random() > 0.7 ? 'high' : Math.random() > 0.4 ? 'medium' : 'low' as any,
+      })) || [];
+
       // Transform order stats to match interface
       const ordersByStatus = [
         { status: 'pending', count: orderStats.pending },
@@ -294,10 +326,10 @@ const Dashboard: React.FC = () => {
         { status: 'cancelled', count: orderStats.cancelled },
       ];
 
-      // Transform products by category (simplified for now)
+      // Transform products by category
       const productsByCategory = categoryBreakdown.map(cat => ({
         category: cat.name,
-        count: Math.round(cat.value / 10), // Rough estimate
+        count: Math.round(cat.value / 10), // Rough estimate based on value
       }));
 
       setDashboardData({
@@ -340,9 +372,15 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // Navigation functions
+  const navigateToOrders = () => navigate('/orders');
+  const navigateToProducts = () => navigate('/products');
+  const navigateToLowStock = () => navigate('/low-stock');
+  const navigateToAnalytics = () => navigate('/analytics');
+
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [selectedView]);
 
   const getTrendDirection = (trend: string | null) => {
     if (!trend) return 'neutral';
@@ -518,7 +556,7 @@ const Dashboard: React.FC = () => {
               {/* Inventory Trend Chart */}
               <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 lg:col-span-2">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-white">Inventory & Revenue Trends</h2>
+                  <h2 className="text-lg font-semibold text-white">Inventory & Revenue Trends ({selectedView})</h2>
                   <div className="flex">
                     {['Monthly', 'Weekly', 'Daily'].map((period) => (
                       <button
@@ -678,7 +716,10 @@ const Dashboard: React.FC = () => {
                     <Clock className="h-5 w-5 text-amber-400 mr-2" />
                     Recent Alerts
                   </h2>
-                  <button className="text-xs text-indigo-400 hover:text-indigo-300">
+                  <button 
+                    onClick={navigateToAnalytics}
+                    className="text-xs text-indigo-400 hover:text-indigo-300"
+                  >
                     View All
                   </button>
                 </div>
@@ -696,7 +737,10 @@ const Dashboard: React.FC = () => {
                     <AlertTriangle className="h-5 w-5 text-rose-400 mr-2" />
                     Low Stock Items
                   </h2>
-                  <button className="text-xs text-indigo-400 hover:text-indigo-300">
+                  <button 
+                    onClick={navigateToLowStock}
+                    className="text-xs text-indigo-400 hover:text-indigo-300"
+                  >
                     View All
                   </button>
                 </div>
@@ -718,7 +762,10 @@ const Dashboard: React.FC = () => {
               <div className="bg-slate-800 rounded-lg border border-slate-700 p-4 md:col-span-2">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-white">Top Selling Products</h2>
-                  <button className="text-xs text-indigo-400 hover:text-indigo-300">
+                  <button 
+                    onClick={navigateToProducts}
+                    className="text-xs text-indigo-400 hover:text-indigo-300"
+                  >
                     Export Report
                   </button>
                 </div>
@@ -780,7 +827,10 @@ const Dashboard: React.FC = () => {
                     <AlertTriangle className="h-5 w-5 text-rose-400 mr-2" />
                     Low Stock Items
                   </h2>
-                  <button className="text-xs text-indigo-400 hover:text-indigo-300">
+                  <button 
+                    onClick={navigateToLowStock}
+                    className="text-xs text-indigo-400 hover:text-indigo-300"
+                  >
                     View All
                   </button>
                 </div>
@@ -798,7 +848,10 @@ const Dashboard: React.FC = () => {
                     <Truck className="h-5 w-5 text-emerald-400 mr-2" />
                     Upcoming Shipments
                   </h2>
-                  <button className="text-xs text-indigo-400 hover:text-indigo-300">
+                  <button 
+                    onClick={navigateToOrders}
+                    className="text-xs text-indigo-400 hover:text-indigo-300"
+                  >
                     View All
                   </button>
                 </div>
@@ -910,7 +963,10 @@ const Dashboard: React.FC = () => {
                     <ShoppingCart className="h-5 w-5 text-indigo-400 mr-2" />
                     Recent Orders
                   </h2>
-                  <button className="text-xs text-indigo-400 hover:text-indigo-300">
+                  <button 
+                    onClick={navigateToOrders}
+                    className="text-xs text-indigo-400 hover:text-indigo-300"
+                  >
                     View All
                   </button>
                 </div>

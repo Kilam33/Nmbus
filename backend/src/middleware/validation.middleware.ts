@@ -153,7 +153,7 @@ export const schemas = {
 
   // Analytics query schemas
   analyticsQuery: z.object({
-    period: z.enum(['7d', '30d', '90d', '1y']).optional().default('30d'),
+    period: z.enum(['daily', 'weekly', 'monthly', 'yearly']).optional().default('monthly'),
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
     category: z.string().uuid().optional(),

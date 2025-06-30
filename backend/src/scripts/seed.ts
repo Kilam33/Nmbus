@@ -3,490 +3,463 @@ import { query, closeDatabase } from '../utils/database';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
-interface SeedData {
-  categories: Array<{ id: string; name: string; description: string }>;
-  suppliers: Array<{ id: string; name: string; email: string; phone: string; address: string; contact_person: string; avg_lead_time: number; status: string; reliability_score: number; on_time_delivery_rate: number }>;
-  products: Array<{ id: string; name: string; description: string; price: number; quantity: number; category_id: string; supplier_id: string; low_stock_threshold: number; sku: string }>;
-  orders: Array<{ id: string; supplier_id: string; product_id: string; quantity: number; status: string; customer: string; payment_method: string; shipping_method: string; order_number: string; total: number; created_at: string }>;
+interface ReorderSeedData {
+  policies: Array<{
+    id: string;
+    product_id?: string;
+    category_id?: string;
+    supplier_id?: string;
+    min_stock_multiplier: number;
+    safety_stock_days: number;
+    review_frequency_days: number;
+    auto_approve_threshold?: number;
+    is_active: boolean;
+  }>;
+  suggestions: Array<{
+    id: string;
+    product_id: string;
+    supplier_id: string;
+    suggested_quantity: number;
+    estimated_cost: number;
+    urgency: string;
+    confidence_score: number;
+    reason: string;
+    lead_time_days: number;
+    status: string;
+    expires_at: string;
+  }>;
+  demandPatterns: Array<{
+    id: string;
+    product_id: string;
+    period_start: string;
+    period_end: string;
+    avg_daily_demand: number;
+    peak_demand: number;
+    demand_variance: number;
+    seasonality_factor: number;
+    trend_factor: number;
+  }>;
+  history: Array<{
+    id: string;
+    product_id: string;
+    suggested_quantity: number;
+    actual_quantity_ordered: number | null;
+    suggested_cost: number;
+    actual_cost: number | null;
+    action_taken: string;
+    action_reason: string;
+    accuracy_score: number;
+    created_at: string;
+  }>;
 }
 
-// Sample data generators
-const generateCategories = (): SeedData['categories'] => [
-  { id: uuidv4(), name: 'Electronics', description: 'Electronic devices and components' },
-  { id: uuidv4(), name: 'Clothing', description: 'Apparel and fashion items' },
-  { id: uuidv4(), name: 'Home & Garden', description: 'Home improvement and gardening supplies' },
-  { id: uuidv4(), name: 'Sports & Outdoors', description: 'Sports equipment and outdoor gear' },
-  { id: uuidv4(), name: 'Books & Media', description: 'Books, movies, and digital media' },
-  { id: uuidv4(), name: 'Health & Beauty', description: 'Health and beauty products' },
-  { id: uuidv4(), name: 'Automotive', description: 'Car parts and automotive supplies' },
-  { id: uuidv4(), name: 'Office Supplies', description: 'Office and business supplies' },
-  { id: uuidv4(), name: 'Food & Beverages', description: 'Food items and beverages' },
-  { id: uuidv4(), name: 'Toys & Games', description: 'Toys and gaming products' },
-];
+const generateReorderPolicies = async (): Promise<ReorderSeedData['policies']> => {
+  const policies: ReorderSeedData['policies'] = [];
 
-const generateSuppliers = (): SeedData['suppliers'] => [
-  {
-    id: uuidv4(),
-    name: 'TechCorp Solutions',
-    email: 'orders@techcorp.com',
-    phone: '+1-555-0101',
-    address: '123 Tech Street, Silicon Valley, CA 94000',
-    contact_person: 'John Smith',
-    avg_lead_time: 7,
-    status: 'active',
-    reliability_score: 95,
-    on_time_delivery_rate: 98,
-  },
-  {
-    id: uuidv4(),
-    name: 'Fashion Forward Inc',
-    email: 'supply@fashionforward.com',
-    phone: '+1-555-0102',
-    address: '456 Fashion Ave, New York, NY 10001',
-    contact_person: 'Sarah Johnson',
-    avg_lead_time: 14,
-    status: 'active',
-    reliability_score: 88,
-    on_time_delivery_rate: 92,
-  },
-  {
-    id: uuidv4(),
-    name: 'Home Essentials Ltd',
-    email: 'orders@homeessentials.com',
-    phone: '+1-555-0103',
-    address: '789 Home Blvd, Chicago, IL 60601',
-    contact_person: 'Mike Wilson',
-    avg_lead_time: 10,
-    status: 'active',
-    reliability_score: 91,
-    on_time_delivery_rate: 94,
-  },
-  {
-    id: uuidv4(),
-    name: 'Sports Gear Pro',
-    email: 'wholesale@sportsgear.com',
-    phone: '+1-555-0104',
-    address: '321 Sports Way, Denver, CO 80201',
-    contact_person: 'Lisa Brown',
-    avg_lead_time: 12,
-    status: 'active',
-    reliability_score: 85,
-    on_time_delivery_rate: 89,
-  },
-  {
-    id: uuidv4(),
-    name: 'Global Auto Parts',
-    email: 'orders@globalauto.com',
-    phone: '+1-555-0105',
-    address: '654 Auto Lane, Detroit, MI 48201',
-    contact_person: 'Robert Davis',
-    avg_lead_time: 5,
-    status: 'active',
-    reliability_score: 93,
-    on_time_delivery_rate: 96,
-  },
-  {
-    id: uuidv4(),
-    name: 'Office Solutions Plus',
-    email: 'supply@officesolutions.com',
-    phone: '+1-555-0106',
-    address: '987 Business Park, Atlanta, GA 30301',
-    contact_person: 'Jennifer Lee',
-    avg_lead_time: 8,
-    status: 'active',
-    reliability_score: 90,
-    on_time_delivery_rate: 93,
-  },
-  {
-    id: uuidv4(),
-    name: 'Health & Beauty Direct',
-    email: 'orders@healthbeauty.com',
-    phone: '+1-555-0107',
-    address: '147 Beauty Blvd, Los Angeles, CA 90210',
-    contact_person: 'Amanda White',
-    avg_lead_time: 9,
-    status: 'active',
-    reliability_score: 87,
-    on_time_delivery_rate: 91,
-  },
-  {
-    id: uuidv4(),
-    name: 'Book World Distributors',
-    email: 'wholesale@bookworld.com',
-    phone: '+1-555-0108',
-    address: '258 Library St, Boston, MA 02101',
-    contact_person: 'David Miller',
-    avg_lead_time: 15,
-    status: 'active',
-    reliability_score: 82,
-    on_time_delivery_rate: 88,
-  },
-];
+  // Get some products, categories, and suppliers for policies
+  const [productsResult, categoriesResult, suppliersResult] = await Promise.all([
+    query('SELECT id FROM products LIMIT 10'),
+    query('SELECT id FROM categories LIMIT 5'),
+    query('SELECT id FROM suppliers LIMIT 5')
+  ]);
 
-const generateProducts = (categories: SeedData['categories'], suppliers: SeedData['suppliers']): SeedData['products'] => {
-  const products: SeedData['products'] = [];
-  
-  const productTemplates = [
-    // Electronics
-    { name: 'Wireless Bluetooth Headphones', description: 'High-quality wireless headphones with noise cancellation', price: 149.99, baseQuantity: 50 },
-    { name: 'Smartphone Case', description: 'Protective case for smartphones', price: 24.99, baseQuantity: 200 },
-    { name: 'USB-C Cable', description: 'Fast charging USB-C cable', price: 12.99, baseQuantity: 300 },
-    { name: 'Wireless Charger', description: 'Qi-compatible wireless charging pad', price: 39.99, baseQuantity: 75 },
-    { name: 'Bluetooth Speaker', description: 'Portable Bluetooth speaker with bass boost', price: 79.99, baseQuantity: 60 },
-    
-    // Clothing
-    { name: 'Cotton T-Shirt', description: '100% cotton comfortable t-shirt', price: 19.99, baseQuantity: 150 },
-    { name: 'Denim Jeans', description: 'Classic fit denim jeans', price: 59.99, baseQuantity: 80 },
-    { name: 'Running Shoes', description: 'Lightweight running shoes', price: 89.99, baseQuantity: 45 },
-    { name: 'Winter Jacket', description: 'Insulated winter jacket', price: 129.99, baseQuantity: 30 },
-    { name: 'Baseball Cap', description: 'Adjustable baseball cap', price: 24.99, baseQuantity: 100 },
-    
-    // Home & Garden
-    { name: 'LED Light Bulb', description: 'Energy-efficient LED bulb', price: 8.99, baseQuantity: 500 },
-    { name: 'Garden Hose', description: '50ft expandable garden hose', price: 34.99, baseQuantity: 40 },
-    { name: 'Kitchen Knife Set', description: 'Professional kitchen knife set', price: 79.99, baseQuantity: 25 },
-    { name: 'Throw Pillow', description: 'Decorative throw pillow', price: 16.99, baseQuantity: 120 },
-    { name: 'Plant Pot', description: 'Ceramic plant pot with drainage', price: 22.99, baseQuantity: 85 },
-    
-    // Sports & Outdoors
-    { name: 'Yoga Mat', description: 'Non-slip yoga mat', price: 29.99, baseQuantity: 70 },
-    { name: 'Water Bottle', description: 'Insulated stainless steel water bottle', price: 24.99, baseQuantity: 150 },
-    { name: 'Camping Tent', description: '4-person camping tent', price: 199.99, baseQuantity: 15 },
-    { name: 'Fitness Tracker', description: 'Waterproof fitness tracker', price: 99.99, baseQuantity: 35 },
-    { name: 'Basketball', description: 'Official size basketball', price: 34.99, baseQuantity: 50 },
-    
-    // Office Supplies
-    { name: 'Notebook', description: 'Spiral-bound notebook', price: 4.99, baseQuantity: 400 },
-    { name: 'Pen Set', description: 'Set of 10 ballpoint pens', price: 9.99, baseQuantity: 200 },
-    { name: 'Desk Organizer', description: 'Multi-compartment desk organizer', price: 19.99, baseQuantity: 60 },
-    { name: 'Printer Paper', description: 'Ream of 500 sheets', price: 12.99, baseQuantity: 100 },
-    { name: 'Stapler', description: 'Heavy-duty office stapler', price: 15.99, baseQuantity: 80 },
-  ];
+  const products = productsResult.rows;
+  const categories = categoriesResult.rows;
+  const suppliers = suppliersResult.rows;
 
-  productTemplates.forEach((template, index) => {
-    const categoryIndex = index % categories.length;
-    const supplierIndex = index % suppliers.length;
-    
-    const category = categories[categoryIndex];
-    const supplier = suppliers[supplierIndex];
-    
-    if (!category || !supplier) {
-      logger.warn(`Skipping product ${template.name} - missing category or supplier`);
-      return;
-    }
-    
-    // Create multiple variants of each product with different quantities
-    for (let variant = 0; variant < 2; variant++) {
-      const quantity = Math.floor(template.baseQuantity * (0.5 + Math.random()));
-      const lowStockThreshold = Math.floor(quantity * 0.2);
-      
-      products.push({
-        id: uuidv4(),
-        name: variant === 0 ? template.name : `${template.name} Pro`,
-        description: template.description,
-        price: variant === 0 ? template.price : template.price * 1.3,
-        quantity,
-        category_id: category.id,
-        supplier_id: supplier.id,
-        low_stock_threshold: lowStockThreshold,
-        sku: `SKU-${(index * 2 + variant + 1).toString().padStart(4, '0')}`,
-      });
-    }
+  // Global default policy
+  policies.push({
+    id: uuidv4(),
+    min_stock_multiplier: 1.5,
+    safety_stock_days: 7,
+    review_frequency_days: 7,
+    auto_approve_threshold: 500,
+    is_active: true
   });
 
-  return products;
-};
+  // Category-specific policies
+  categories.forEach((category: { id: string }, index: number) => {
+    policies.push({
+      id: uuidv4(),
+      category_id: category.id,
+      min_stock_multiplier: 1.2 + (index * 0.1),
+      safety_stock_days: 5 + index,
+      review_frequency_days: 7,
+      auto_approve_threshold: 1000 + (index * 200),
+      is_active: true
+    });
+  });
 
-const generateOrders = (products: SeedData['products'], suppliers: SeedData['suppliers']): SeedData['orders'] => {
-  const orders: SeedData['orders'] = [];
-  const customers = [
-    'Acme Corporation', 'Global Industries', 'Tech Innovations', 'Retail Solutions',
-    'Manufacturing Co', 'Service Experts', 'Digital Dynamics', 'Enterprise Systems',
-    'Business Partners', 'Commercial Group', 'Industrial Supply', 'Professional Services',
-    'Quality Products', 'Reliable Solutions', 'Advanced Technologies', 'Modern Enterprises',
-  ];
-  
-  const paymentMethods = ['Credit Card', 'Bank Transfer', 'PayPal', 'Check', 'Net 30'];
-  const shippingMethods = ['Standard', 'Express', 'Overnight', 'Ground', 'Priority'];
-  const statuses = ['pending', 'processing', 'shipped', 'completed', 'cancelled'];
-  const statusWeights = [0.1, 0.15, 0.2, 0.5, 0.05]; // Most orders should be completed
-
-  // Generate orders for the past year
-  const startDate = new Date();
-  startDate.setFullYear(startDate.getFullYear() - 1);
-
-  for (let i = 0; i < 2000; i++) {
-    const product = products[Math.floor(Math.random() * products.length)];
-    if (!product) {
-      logger.warn(`Skipping order ${i} - no product available`);
-      continue;
-    }
-    
-    const supplier = suppliers.find(s => s.id === product.supplier_id);
-    if (!supplier) {
-      logger.warn(`Skipping order ${i} - supplier not found for product ${product.id}`);
-      continue;
-    }
-    
-    // Generate random date within the past year
-    const orderDate = new Date(startDate.getTime() + Math.random() * (Date.now() - startDate.getTime()));
-    
-    // Select status based on weights
-    let statusIndex = 0;
-    const random = Math.random();
-    let cumulativeWeight = 0;
-    for (let j = 0; j < statusWeights.length; j++) {
-      const weight = statusWeights[j];
-      if (weight === undefined) continue;
-      cumulativeWeight += weight;
-      if (random <= cumulativeWeight) {
-        statusIndex = j;
-        break;
-      }
-    }
-    
-    const quantity = Math.floor(Math.random() * 10) + 1;
-    const total = quantity * product.price;
-    const orderNumber = `ORD-${orderDate.getFullYear()}${(orderDate.getMonth() + 1).toString().padStart(2, '0')}${orderDate.getDate().toString().padStart(2, '0')}-${(i + 1).toString().padStart(4, '0')}`;
-
-    const customer = customers[Math.floor(Math.random() * customers.length)];
-    const paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)];
-    const shippingMethod = shippingMethods[Math.floor(Math.random() * shippingMethods.length)];
-    const status = statuses[statusIndex];
-
-    if (!customer || !paymentMethod || !shippingMethod || !status) {
-      logger.warn(`Skipping order ${i} - missing required data`);
-      continue;
-    }
-
-    orders.push({
+  // Supplier-specific policies
+  suppliers.slice(0, 3).forEach((supplier: { id: string }, index: number) => {
+    policies.push({
       id: uuidv4(),
       supplier_id: supplier.id,
+      min_stock_multiplier: 1.3 + (index * 0.1),
+      safety_stock_days: 10 + index,
+      review_frequency_days: 14,
+      auto_approve_threshold: 750 + (index * 150),
+      is_active: true
+    });
+  });
+
+  // Product-specific policies
+  products.slice(0, 5).forEach((product: { id: string }, index: number) => {
+    const policy: ReorderSeedData['policies'][0] = {
+      id: uuidv4(),
       product_id: product.id,
-      quantity,
-      status,
-      customer,
-      payment_method: paymentMethod,
-      shipping_method: shippingMethod,
-      order_number: orderNumber,
-      total,
-      created_at: orderDate.toISOString(),
+      min_stock_multiplier: 2.0 + (index * 0.2),
+      safety_stock_days: 14 + index,
+      review_frequency_days: 3,
+      is_active: true
+    };
+    
+    if (index % 2 === 0) {
+      policy.auto_approve_threshold = 300;
+    }
+    
+    policies.push(policy);
+  });
+
+  return policies;
+};
+
+const generateReorderSuggestions = async (): Promise<ReorderSeedData['suggestions']> => {
+  const suggestions: ReorderSeedData['suggestions'] = [];
+
+  // Get low stock products
+  const lowStockResult = await query(`
+    SELECT 
+      p.id as product_id,
+      p.name,
+      p.price,
+      p.quantity,
+      p.low_stock_threshold,
+      p.supplier_id,
+      s.avg_lead_time
+    FROM products p
+    LEFT JOIN suppliers s ON p.supplier_id = s.id
+    WHERE p.quantity <= p.low_stock_threshold * 1.5
+    ORDER BY (p.quantity::float / p.low_stock_threshold) ASC
+    LIMIT 20
+  `);
+
+  const urgencyLevels = ['critical', 'high', 'medium', 'low'];
+  const statusOptions = ['pending', 'approved', 'rejected'];
+  const reasons = [
+    'Stock level below safety threshold',
+    'Predicted stockout in 5 days based on demand forecast',
+    'Seasonal demand increase expected',
+    'Critical stock level reached',
+    'Demand trend is increasing',
+    'Lead time considerations require immediate reorder',
+    'Safety stock depleted'
+  ];
+
+  lowStockResult.rows.forEach((product: any, index: number) => {
+    const stockRatio = product.quantity / product.low_stock_threshold;
+    const urgency = stockRatio <= 0.3 ? 'critical' : 
+                   stockRatio <= 0.6 ? 'high' : 
+                   stockRatio <= 0.9 ? 'medium' : 'low';
+    
+    const suggestedQuantity = Math.max(
+      product.low_stock_threshold * 2,
+      Math.ceil(product.quantity * 1.5)
+    );
+
+    const confidence = Math.max(60, Math.min(95, 85 - (index * 2)));
+    const leadTime = product.avg_lead_time || (7 + Math.floor(Math.random() * 14));
+
+    const reason = reasons[Math.floor(Math.random() * reasons.length)];
+    const status = index < 15 ? 'pending' : statusOptions[Math.floor(Math.random() * statusOptions.length)];
+
+    suggestions.push({
+      id: uuidv4(),
+      product_id: product.product_id,
+      supplier_id: product.supplier_id,
+      suggested_quantity: suggestedQuantity,
+      estimated_cost: suggestedQuantity * product.price,
+      urgency,
+      confidence_score: confidence,
+      reason: reason || 'Stock level below safety threshold',
+      lead_time_days: leadTime,
+      status: status || 'pending',
+      expires_at: new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString() // 7 days from now
+    });
+  });
+
+  return suggestions;
+};
+
+const generateDemandPatterns = async (): Promise<ReorderSeedData['demandPatterns']> => {
+  const patterns: ReorderSeedData['demandPatterns'] = [];
+
+  // Get products with order history
+  const productsResult = await query(`
+    SELECT DISTINCT p.id
+    FROM products p
+    INNER JOIN orders o ON p.id = o.product_id
+    WHERE o.status = 'completed'
+    LIMIT 30
+  `);
+
+  const products = productsResult.rows;
+
+  // Generate patterns for the last 12 months
+  const now = new Date();
+  for (let monthsBack = 0; monthsBack < 12; monthsBack++) {
+    const periodStart = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() - monthsBack + 1, 0);
+
+    products.forEach((product: { id: string }, index: number) => {
+      // Simulate seasonal patterns
+      const month = periodStart.getMonth();
+      const seasonalityFactor = 1.0 + Math.sin((month / 12) * 2 * Math.PI) * 0.3;
+      
+      // Simulate trend
+      const trendFactor = 1.0 + (monthsBack * -0.02); // Slight declining trend over time
+      
+      const baseDemand = 2 + (index % 5); // Base demand varies by product
+      const avgDailyDemand = baseDemand * seasonalityFactor * trendFactor;
+      const peakDemand = avgDailyDemand * (1.5 + Math.random() * 0.5);
+      const variance = avgDailyDemand * (0.2 + Math.random() * 0.3);
+
+      const periodStartStr = periodStart.toISOString().split('T')[0];
+      const periodEndStr = periodEnd.toISOString().split('T')[0];
+
+      patterns.push({
+        id: uuidv4(),
+        product_id: product.id,
+        period_start: periodStartStr || '2024-01-01',
+        period_end: periodEndStr || '2024-01-31',
+        avg_daily_demand: Math.round(avgDailyDemand * 100) / 100,
+        peak_demand: Math.round(peakDemand * 100) / 100,
+        demand_variance: Math.round(variance * 100) / 100,
+        seasonality_factor: Math.round(seasonalityFactor * 100) / 100,
+        trend_factor: Math.round(trendFactor * 100) / 100
+      });
     });
   }
 
-  return orders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  return patterns;
 };
 
-const createTables = async (): Promise<void> => {
-  logger.info('Creating database tables...');
+const generateReorderHistory = async (): Promise<ReorderSeedData['history']> => {
+  const history: ReorderSeedData['history'] = [];
 
-  // Create categories table
-  await query(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name TEXT NOT NULL,
-      description TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
+  // Get some products for history
+  const productsResult = await query('SELECT id FROM products LIMIT 20');
+  const products = productsResult.rows;
 
-  // Create suppliers table
-  await query(`
-    CREATE TABLE IF NOT EXISTS suppliers (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      phone TEXT NOT NULL,
-      address TEXT NOT NULL,
-      contact_person TEXT NOT NULL,
-      status VARCHAR(20) DEFAULT 'new' CHECK (status IN ('active', 'inactive', 'on-hold', 'new')),
-      reliability_score INTEGER DEFAULT 50 CHECK (reliability_score >= 0 AND reliability_score <= 100),
-      avg_lead_time INTEGER NOT NULL CHECK (avg_lead_time > 0),
-      last_order_date TIMESTAMPTZ,
-      on_time_delivery_rate INTEGER DEFAULT 80 CHECK (on_time_delivery_rate >= 0 AND on_time_delivery_rate <= 100),
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ
-    )
-  `);
+  const actions = ['approved', 'rejected', 'modified', 'auto_ordered'];
+  const reasons = [
+    'User approved suggestion',
+    'Quantity adjusted based on budget constraints',
+    'Alternative supplier selected',
+    'Rejected due to overstock concerns',
+    'Auto-approved under threshold',
+    'Modified quantity based on updated forecast'
+  ];
 
-  // Create products table
-  await query(`
-    CREATE TABLE IF NOT EXISTS products (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name TEXT NOT NULL,
-      sku VARCHAR(50) UNIQUE,
-      description TEXT,
-      price DECIMAL(10,2) NOT NULL CHECK (price >= 0),
-      quantity INTEGER NOT NULL CHECK (quantity >= 0),
-      low_stock_threshold INTEGER NOT NULL DEFAULT 10 CHECK (low_stock_threshold >= 0),
-      category_id UUID NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
-      supplier_id UUID NOT NULL REFERENCES suppliers(id) ON DELETE RESTRICT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ
-    )
-  `);
+  // Generate history for the last 90 days
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - 90);
 
-  // Create orders table
-  await query(`
-    CREATE TABLE IF NOT EXISTS orders (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      supplier_id UUID NOT NULL REFERENCES suppliers(id) ON DELETE RESTRICT,
-      product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-      quantity INTEGER NOT NULL CHECK (quantity > 0),
-      status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'shipped', 'completed', 'cancelled')),
-      customer TEXT NOT NULL,
-      payment_method TEXT NOT NULL,
-      shipping_method TEXT NOT NULL,
-      order_number VARCHAR(50) UNIQUE,
-      total DECIMAL(10,2) CHECK (total >= 0),
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ
-    )
-  `);
-
-  // Create indexes for better performance
-  await query('CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)');
-  await query('CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(supplier_id)');
-  await query('CREATE INDEX IF NOT EXISTS idx_products_low_stock ON products(quantity, low_stock_threshold)');
-  await query('CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)');
-  await query('CREATE INDEX IF NOT EXISTS idx_orders_supplier ON orders(supplier_id)');
-  await query('CREATE INDEX IF NOT EXISTS idx_orders_product ON orders(product_id)');
-  await query('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)');
-  await query('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)');
-  await query('CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number)');
-  await query('CREATE INDEX IF NOT EXISTS idx_suppliers_email ON suppliers(email)');
-  await query('CREATE INDEX IF NOT EXISTS idx_suppliers_status ON suppliers(status)');
-  await query('CREATE INDEX IF NOT EXISTS idx_categories_name ON categories(name)');
-
-  logger.info('Database tables created successfully');
-};
-
-const seedDatabase = async (): Promise<void> => {
-  try {
-    logger.info('Starting database seeding...');
-
-    // Test database connection first
-    logger.info('Testing database connection...');
-    try {
-      await query('SELECT 1 as test');
-      logger.info('Database connection successful');
-    } catch (error) {
-      logger.error('Database connection failed:', error);
-      throw new Error(`Database connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  for (let i = 0; i < 100; i++) {
+    const product = products[Math.floor(Math.random() * products.length)];
+    const action = actions[Math.floor(Math.random() * actions.length)];
+    const suggestedQuantity = 10 + Math.floor(Math.random() * 90);
+    const actualQuantity = action === 'approved' ? suggestedQuantity :
+                          action === 'modified' ? Math.floor(suggestedQuantity * (0.7 + Math.random() * 0.6)) :
+                          action === 'auto_ordered' ? suggestedQuantity : null;
+    
+    const suggestedCost = suggestedQuantity * (10 + Math.random() * 40);
+    const actualCost = actualQuantity ? (actualQuantity / suggestedQuantity) * suggestedCost : null;
+    
+    // Calculate accuracy score based on action
+    let accuracyScore: number;
+    if (action === 'approved' || action === 'auto_ordered') {
+      accuracyScore = 80 + Math.floor(Math.random() * 20); // 80-100
+    } else if (action === 'modified') {
+      accuracyScore = 60 + Math.floor(Math.random() * 30); // 60-90
+    } else {
+      accuracyScore = 30 + Math.floor(Math.random() * 40); // 30-70
     }
 
-    // Create tables first
-    await createTables();
+    const createdAt = new Date(startDate.getTime() + Math.random() * (Date.now() - startDate.getTime()));
 
-    // Check if data already exists
-    const existingCategories = await query('SELECT COUNT(*) FROM categories');
-    if (parseInt(existingCategories.rows[0].count) > 0) {
-      logger.info('Database already contains data. Skipping seed.');
+    const actionTaken = action || 'approved';
+    const actionReason = reasons[Math.floor(Math.random() * reasons.length)] || 'User approved suggestion';
+
+    history.push({
+      id: uuidv4(),
+      product_id: product.id,
+      suggested_quantity: suggestedQuantity,
+      actual_quantity_ordered: actualQuantity,
+      suggested_cost: Math.round(suggestedCost * 100) / 100,
+      actual_cost: actualCost ? Math.round(actualCost * 100) / 100 : null,
+      action_taken: actionTaken,
+      action_reason: actionReason,
+      accuracy_score: accuracyScore,
+      created_at: createdAt.toISOString()
+    });
+  }
+
+  return history.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+};
+
+const seedReorderData = async (): Promise<void> => {
+  try {
+    logger.info('Starting reorder data seeding...');
+
+    // Check if reorder data already exists
+    const existingPolicies = await query('SELECT COUNT(*) FROM reorder_policies');
+    if (parseInt(existingPolicies.rows[0].count) > 0) {
+      logger.info('Reorder data already exists. Skipping seed.');
       return;
     }
 
     // Generate seed data
-    logger.info('Generating seed data...');
-    const categories = generateCategories();
-    const suppliers = generateSuppliers();
-    const products = generateProducts(categories, suppliers);
-    const orders = generateOrders(products, suppliers);
+    logger.info('Generating reorder seed data...');
+    const [policies, suggestions, demandPatterns, history] = await Promise.all([
+      generateReorderPolicies(),
+      generateReorderSuggestions(),
+      generateDemandPatterns(),
+      generateReorderHistory()
+    ]);
 
     logger.info(`Generated:
-      - ${categories.length} categories
-      - ${suppliers.length} suppliers  
-      - ${products.length} products
-      - ${orders.length} orders`);
+      - ${policies.length} reorder policies
+      - ${suggestions.length} reorder suggestions
+      - ${demandPatterns.length} demand patterns
+      - ${history.length} history records`);
 
-    // Insert categories
-    logger.info('Inserting categories...');
-    for (const category of categories) {
-      await query(
-        'INSERT INTO categories (id, name, description, created_at) VALUES ($1, $2, $3, NOW())',
-        [category.id, category.name, category.description]
-      );
-    }
-
-    // Insert suppliers
-    logger.info('Inserting suppliers...');
-    for (const supplier of suppliers) {
+    // Insert reorder policies
+    logger.info('Inserting reorder policies...');
+    for (const policy of policies) {
       await query(`
-        INSERT INTO suppliers (
-          id, name, email, phone, address, contact_person, avg_lead_time,
-          status, reliability_score, on_time_delivery_rate, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-      `, [
-        supplier.id, supplier.name, supplier.email, supplier.phone, supplier.address,
-        supplier.contact_person, supplier.avg_lead_time, supplier.status,
-        supplier.reliability_score, supplier.on_time_delivery_rate
-      ]);
-    }
-
-    // Insert products
-    logger.info('Inserting products...');
-    for (const product of products) {
-      await query(`
-        INSERT INTO products (
-          id, name, description, price, quantity, category_id, supplier_id,
-          low_stock_threshold, sku, created_at
+        INSERT INTO reorder_policies (
+          id, product_id, category_id, supplier_id, min_stock_multiplier,
+          safety_stock_days, review_frequency_days, auto_approve_threshold, is_active, created_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
       `, [
-        product.id, product.name, product.description, product.price, product.quantity,
-        product.category_id, product.supplier_id, product.low_stock_threshold, product.sku
+        policy.id, policy.product_id || null, policy.category_id || null,
+        policy.supplier_id || null, policy.min_stock_multiplier,
+        policy.safety_stock_days, policy.review_frequency_days,
+        policy.auto_approve_threshold || null, policy.is_active
       ]);
     }
 
-    // Insert orders
-    logger.info('Inserting orders...');
-    for (const order of orders) {
+    // Insert reorder suggestions
+    logger.info('Inserting reorder suggestions...');
+    for (const suggestion of suggestions) {
       await query(`
-        INSERT INTO orders (
-          id, supplier_id, product_id, quantity, status, customer,
-          payment_method, shipping_method, order_number, total, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO reorder_suggestions (
+          id, product_id, supplier_id, suggested_quantity, estimated_cost,
+          urgency, confidence_score, reason, lead_time_days, status, created_at, expires_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), $11)
       `, [
-        order.id, order.supplier_id, order.product_id, order.quantity, order.status,
-        order.customer, order.payment_method, order.shipping_method, order.order_number,
-        order.total, order.created_at
+        suggestion.id, suggestion.product_id, suggestion.supplier_id,
+        suggestion.suggested_quantity, suggestion.estimated_cost, suggestion.urgency,
+        suggestion.confidence_score, suggestion.reason, suggestion.lead_time_days,
+        suggestion.status, suggestion.expires_at
       ]);
     }
 
-    // Update supplier last_order_date
-    logger.info('Updating supplier statistics...');
-    await query(`
-      UPDATE suppliers 
-      SET last_order_date = (
-        SELECT MAX(created_at) 
-        FROM orders 
-        WHERE orders.supplier_id = suppliers.id
-      )
-      WHERE id IN (SELECT DISTINCT supplier_id FROM orders)
-    `);
+    // Insert demand patterns
+    logger.info('Inserting demand patterns...');
+    for (const pattern of demandPatterns) {
+      await query(`
+        INSERT INTO demand_patterns (
+          id, product_id, period_start, period_end, avg_daily_demand,
+          peak_demand, demand_variance, seasonality_factor, trend_factor, calculated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+      `, [
+        pattern.id, pattern.product_id, pattern.period_start, pattern.period_end,
+        pattern.avg_daily_demand, pattern.peak_demand, pattern.demand_variance,
+        pattern.seasonality_factor, pattern.trend_factor
+      ]);
+    }
 
-    logger.info('Database seeding completed successfully!');
-    logger.info('You can now start the API server and begin testing with realistic data.');
+    // Insert reorder history
+    logger.info('Inserting reorder history...');
+    for (const record of history) {
+      await query(`
+        INSERT INTO reorder_history (
+          id, product_id, suggested_quantity, actual_quantity_ordered,
+          suggested_cost, actual_cost, action_taken, action_reason, accuracy_score, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [
+        record.id, record.product_id, record.suggested_quantity,
+        record.actual_quantity_ordered, record.suggested_cost, record.actual_cost,
+        record.action_taken, record.action_reason, record.accuracy_score, record.created_at
+      ]);
+    }
+
+    // Insert some forecast accuracy data
+    logger.info('Inserting forecast accuracy data...');
+    const productsForAccuracy = await query('SELECT id FROM products LIMIT 10');
+    
+    for (const product of productsForAccuracy.rows) {
+      for (let daysBack = 1; daysBack <= 30; daysBack++) {
+        const forecastDate = new Date();
+        forecastDate.setDate(forecastDate.getDate() - daysBack);
+        
+        const forecastedDemand = 1 + Math.random() * 5;
+        const actualDemand = forecastedDemand * (0.8 + Math.random() * 0.4); // ±20% variance
+        const accuracy = Math.max(50, Math.min(100, 100 - Math.abs(forecastedDemand - actualDemand) / forecastedDemand * 100));
+
+        await query(`
+          INSERT INTO forecast_accuracy (
+            product_id, forecast_date, forecasted_demand, actual_demand, accuracy_score, model_version, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+          ON CONFLICT (product_id, forecast_date, model_version) DO NOTHING
+        `, [
+          product.id, forecastDate.toISOString().split('T')[0],
+          Math.round(forecastedDemand * 100) / 100,
+          Math.round(actualDemand * 100) / 100,
+          Math.round(accuracy),
+          'v1.0' // model_version - shortened to fit VARCHAR(20)
+        ]);
+      }
+    }
+
+    // Insert reorder settings
+    logger.info('Inserting reorder settings...');
+    await query(`
+      INSERT INTO reorder_settings (
+        id, auto_reorder_enabled, analysis_frequency_hours, default_confidence_threshold,
+        max_auto_approve_amount, notification_email, slack_webhook_url, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      ON CONFLICT (id) DO NOTHING
+    `, [
+      uuidv4(),
+      true, // auto_reorder_enabled
+      24,   // analysis_frequency_hours (daily)
+      75,   // default_confidence_threshold
+      1000, // max_auto_approve_amount
+      'admin@nimbus', // notification_email - shortened to fit VARCHAR(20)
+      null, // slack_webhook_url
+    ]);
+
+    logger.info('Reorder data seeding completed successfully!');
+    logger.info('The reorder system is now ready with realistic test data.');
 
   } catch (error) {
-    logger.error('Database seeding failed:', error);
-    if (error instanceof Error) {
-      logger.error('Error details:', {
-        message: error.message,
-        stack: error.stack
-      });
-    }
+    logger.error('Reorder data seeding failed:', error);
     throw error;
   }
 };
 
 // Run the seeder
 if (require.main === module) {
-  seedDatabase()
+  seedReorderData()
     .then(() => {
-      logger.info('Seed script completed');
+      logger.info('Reorder seed script completed');
       process.exit(0);
     })
     .catch((error) => {
-      logger.error('Seed script failed:', error);
+      logger.error('Reorder seed script failed:', error);
       process.exit(1);
     })
     .finally(() => {
@@ -494,4 +467,4 @@ if (require.main === module) {
     });
 }
 
-export { seedDatabase };
+export { seedReorderData };

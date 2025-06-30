@@ -10,8 +10,16 @@ export interface Order {
   updated_at?: string;
   order_number: string;
   total: number;
+  customer?: string;
+  payment_method?: string;
+  shipping_method?: string;
+  auto_generated?: boolean;
+  product_name?: string;
+  product_price?: string;
+  supplier_name?: string;
   supplier?: { name: string };
-  product?: { name: string };
+  suppliers?: { name: string };
+  products?: { name: string; price: string };
 }
 
 export interface CreateOrderRequest {

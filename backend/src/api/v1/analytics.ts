@@ -896,17 +896,111 @@ router.get('/products/top',
  */
 router.get('/inventory/trends',
   requireAuth,
+  validate({ query: schemas.analyticsQuery }),
   analyticsCache(600), // 10 minute cache
   asyncHandler(async (req: Request, res: Response) => {
-    // Mock data for now - in a real implementation, you'd track historical inventory
-    const trends = [
-      { name: 'Jan', products: 120, revenue: 15000 },
-      { name: 'Feb', products: 135, revenue: 18000 },
-      { name: 'Mar', products: 142, revenue: 22000 },
-      { name: 'Apr', products: 158, revenue: 25000 },
-      { name: 'May', products: 165, revenue: 28000 },
-      { name: 'Jun', products: 172, revenue: 32000 },
-    ];
+    const { period = 'monthly' } = req.query as any;
+
+    const periodDays: Record<string, number> = {
+      'daily': 7,
+      'weekly': 30,
+      'monthly': 90,
+      'yearly': 365,
+    };
+
+    const days = periodDays[period] || 90;
+
+    // Generate time-based trends based on the selected period
+    let trends: any[] = [];
+
+    if (period === 'daily') {
+      // Daily: Show last 7 days
+      const dailyData = await query(`
+        SELECT 
+          DATE(o.created_at) as date,
+          COUNT(DISTINCT p.id) as products,
+          COALESCE(SUM(o.total), 0) as revenue
+        FROM orders o
+        LEFT JOIN products p ON o.product_id = p.id
+        WHERE o.status = 'completed' 
+        AND o.created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY DATE(o.created_at)
+        ORDER BY date ASC
+      `);
+
+      trends = dailyData.rows.map((row: any) => ({
+        name: new Date(row.date).toLocaleDateString('en-US', { weekday: 'short' }),
+        products: parseInt(row.products),
+        revenue: parseFloat(row.revenue)
+      }));
+    } else if (period === 'weekly') {
+      // Weekly: Show last 4 weeks
+      const weeklyData = await query(`
+        SELECT 
+          DATE_TRUNC('week', o.created_at) as week_start,
+          COUNT(DISTINCT p.id) as products,
+          COALESCE(SUM(o.total), 0) as revenue
+        FROM orders o
+        LEFT JOIN products p ON o.product_id = p.id
+        WHERE o.status = 'completed' 
+        AND o.created_at >= NOW() - INTERVAL '4 weeks'
+        GROUP BY DATE_TRUNC('week', o.created_at)
+        ORDER BY week_start ASC
+      `);
+
+      trends = weeklyData.rows.map((row: any, index: number) => ({
+        name: `Week ${index + 1}`,
+        products: parseInt(row.products),
+        revenue: parseFloat(row.revenue)
+      }));
+    } else if (period === 'monthly') {
+      // Monthly: Show last 6 months
+      const monthlyData = await query(`
+        SELECT 
+          DATE_TRUNC('month', o.created_at) as month_start,
+          COUNT(DISTINCT p.id) as products,
+          COALESCE(SUM(o.total), 0) as revenue
+        FROM orders o
+        LEFT JOIN products p ON o.product_id = p.id
+        WHERE o.status = 'completed' 
+        AND o.created_at >= NOW() - INTERVAL '6 months'
+        GROUP BY DATE_TRUNC('month', o.created_at)
+        ORDER BY month_start ASC
+      `);
+
+      trends = monthlyData.rows.map((row: any) => ({
+        name: new Date(row.month_start).toLocaleDateString('en-US', { month: 'short' }),
+        products: parseInt(row.products),
+        revenue: parseFloat(row.revenue)
+      }));
+    } else {
+      // Yearly: Show last 12 months
+      const yearlyData = await query(`
+        SELECT 
+          DATE_TRUNC('month', o.created_at) as month_start,
+          COUNT(DISTINCT p.id) as products,
+          COALESCE(SUM(o.total), 0) as revenue
+        FROM orders o
+        LEFT JOIN products p ON o.product_id = p.id
+        WHERE o.status = 'completed' 
+        AND o.created_at >= NOW() - INTERVAL '12 months'
+        GROUP BY DATE_TRUNC('month', o.created_at)
+        ORDER BY month_start ASC
+      `);
+
+      trends = yearlyData.rows.map((row: any) => ({
+        name: new Date(row.month_start).toLocaleDateString('en-US', { month: 'short' }),
+        products: parseInt(row.products),
+        revenue: parseFloat(row.revenue)
+      }));
+    }
+
+    // If no data, provide some fallback data
+    if (trends.length === 0) {
+      trends = [
+        { name: 'No Data', products: 0, revenue: 0 }
+      ];
+    }
 
     res.json({
       success: true,
