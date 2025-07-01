@@ -801,38 +801,51 @@ router.get('/orders/trends',
   validate({ query: schemas.analyticsQuery }),
   analyticsCache(300), // 5 minute cache
   asyncHandler(async (req: Request, res: Response) => {
-    const { period = '30d' } = req.query as any;
+    try {
+      const { period = '30d' } = req.query as any;
 
-    const periodDays: Record<string, number> = {
-      '7d': 7,
-      '30d': 30,
-      '90d': 90,
-      '1y': 365,
-    };
+      const periodDays: Record<string, number> = {
+        '7d': 7,
+        '30d': 30,
+        '90d': 90,
+        '1y': 365,
+      };
 
-    const days = periodDays[period] || 30;
+      const days = periodDays[period] || 30;
 
-    const result = await query(`
-      SELECT 
-        DATE(created_at) as date,
-        COUNT(*) as orders,
-        COALESCE(SUM(total), 0) as revenue
-      FROM orders
-      WHERE created_at >= NOW() - INTERVAL '${days} days'
-      GROUP BY DATE(created_at)
-      ORDER BY date ASC
-    `);
+      const result = await query(`
+        SELECT 
+          DATE(created_at) as date,
+          COUNT(*) as orders,
+          COALESCE(SUM(total), 0) as revenue
+        FROM orders
+        WHERE created_at >= NOW() - INTERVAL '${days} days'
+        GROUP BY DATE(created_at)
+        ORDER BY date ASC
+      `);
 
-    const trends = result.rows.map((row: any) => ({
-      name: row.date,
-      orders: parseInt(row.orders),
-      revenue: parseFloat(row.revenue),
-    }));
+      const trends = result.rows.map((row: any) => ({
+        name: row.date,
+        orders: parseInt(row.orders),
+        revenue: parseFloat(row.revenue),
+      }));
 
-    res.json({
-      success: true,
-      data: trends,
-    });
+      res.json({
+        success: true,
+        data: trends,
+      });
+    } catch (error) {
+      logger.error('Order trends analytics error:', error);
+      res.status(500).json({
+        success: false,
+        data: [],
+        error: {
+          message: 'Failed to load order trends',
+          code: 'ORDER_TRENDS_ERROR',
+          statusCode: 500,
+        },
+      });
+    }
   })
 );
 

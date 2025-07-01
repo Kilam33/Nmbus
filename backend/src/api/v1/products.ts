@@ -189,31 +189,44 @@ router.get('/low-stock',
   }) }),
   productCache(300), // 5 minute cache
   asyncHandler(async (req: Request, res: Response) => {
-    const { limit } = req.query as { limit?: number };
-    
-    const result = await query(`
-      SELECT 
-        p.*,
-        c.name as category_name,
-        s.name as supplier_name
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.id
-      LEFT JOIN suppliers s ON p.supplier_id = s.id
-      WHERE p.quantity <= p.low_stock_threshold
-      ORDER BY (p.quantity::float / p.low_stock_threshold) ASC
-      LIMIT $1
-    `, [limit || 100]);
-
-    const products = result.rows.map((row: any) => ({
-      ...row,
-      categories: row.category_name ? { name: row.category_name } : null,
-      suppliers: row.supplier_name ? { name: row.supplier_name } : null,
-    }));
-
-    res.json({
-      success: true,
-      data: products,
-    });
+    try {
+      const { limit } = req.query as { limit?: number };
+      
+      const result = await query(`
+        SELECT 
+          p.*,
+          c.name as category_name,
+          s.name as supplier_name
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN suppliers s ON p.supplier_id = s.id
+        WHERE p.quantity <= p.low_stock_threshold
+        ORDER BY (p.quantity::float / p.low_stock_threshold) ASC
+        LIMIT $1
+      `, [limit || 100]);
+  
+      const products = result.rows.map((row: any) => ({
+        ...row,
+        categories: row.category_name ? { name: row.category_name } : null,
+        suppliers: row.supplier_name ? { name: row.supplier_name } : null,
+      }));
+  
+      res.json({
+        success: true,
+        data: products,
+      });
+    } catch (error) {
+      logger.error('Low stock products error:', error);
+      res.status(500).json({
+        success: false,
+        data: [],
+        error: {
+          message: 'Failed to load low stock products',
+          code: 'LOW_STOCK_ERROR',
+          statusCode: 500,
+        },
+      });
+    }
   })
 );
 
