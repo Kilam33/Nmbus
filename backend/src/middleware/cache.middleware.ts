@@ -36,6 +36,12 @@ export const cache = (options: CacheOptions = {}) => {
     const cacheKey = keyGenerator(req);
 
     try {
+      // Check if Redis is available
+      if (!global.redisClient) {
+        logger.debug('Redis not available, skipping cache', { key: cacheKey });
+        return next();
+      }
+
       const cachedData = await redisService.get(cacheKey);
       
       if (cachedData) {
@@ -69,6 +75,7 @@ export const cache = (options: CacheOptions = {}) => {
         logger.error('Cache middleware error', { key: cacheKey, error: String(error) });
       }
 
+      // Continue without cache on error
       next();
     }
   });

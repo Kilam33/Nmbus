@@ -27,85 +27,86 @@ router.get('/dashboard',
   requireAuth,
   analyticsCache(600), // 10 minute cache
   asyncHandler(async (req: Request, res: Response) => {
-    // Get basic counts
-    const [
-      productsCount,
-      categoriesCount,
-      suppliersCount,
-      ordersCount,
-      lowStockCount,
-      revenueData,
-      ordersByStatus,
-      productsByCategory,
-      recentOrders,
-      topProducts,
-      lowStockProducts,
-    ] = await Promise.all([
-      query('SELECT COUNT(*) FROM products'),
-      query('SELECT COUNT(*) FROM categories'),
-      query('SELECT COUNT(*) FROM suppliers'),
-      query('SELECT COUNT(*) FROM orders'),
-      query('SELECT COUNT(*) FROM products WHERE quantity <= low_stock_threshold'),
-      query(`
-        SELECT 
-          COALESCE(SUM(total), 0) as current_revenue,
-          COALESCE(SUM(CASE WHEN created_at >= NOW() - INTERVAL '30 days' THEN total ELSE 0 END), 0) as last_30_days,
-          COALESCE(SUM(CASE WHEN created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days' THEN total ELSE 0 END), 0) as previous_30_days
-        FROM orders 
-        WHERE status = 'completed'
-      `),
-      query(`
-        SELECT status, COUNT(*) as count
-        FROM orders
-        GROUP BY status
-        ORDER BY count DESC
-      `),
-      query(`
-        SELECT c.name as category, COUNT(p.id) as count
-        FROM categories c
-        LEFT JOIN products p ON c.id = p.category_id
-        GROUP BY c.id, c.name
-        ORDER BY count DESC
-        LIMIT 10
-      `),
-      query(`
-        SELECT 
-          o.*,
-          p.name as product_name,
-          s.name as supplier_name
-        FROM orders o
-        LEFT JOIN products p ON o.product_id = p.id
-        LEFT JOIN suppliers s ON o.supplier_id = s.id
-        ORDER BY o.created_at DESC
-        LIMIT 10
-      `),
-      query(`
-        SELECT 
-          p.id,
-          p.name,
-          c.name as category,
-          COUNT(o.id) as units_sold,
-          COALESCE(SUM(o.total), 0) as revenue
-        FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN orders o ON p.id = o.product_id AND o.status = 'completed'
-        GROUP BY p.id, p.name, c.name
-        ORDER BY units_sold DESC, revenue DESC
-        LIMIT 10
-      `),
-      query(`
-        SELECT 
-          p.*,
-          c.name as category_name,
-          s.name as supplier_name
-        FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN suppliers s ON p.supplier_id = s.id
-        WHERE p.quantity <= p.low_stock_threshold
-        ORDER BY (p.quantity::float / p.low_stock_threshold) ASC
-        LIMIT 10
-      `),
-    ]);
+    try {
+      // Get basic counts with error handling
+      const [
+        productsCount,
+        categoriesCount,
+        suppliersCount,
+        ordersCount,
+        lowStockCount,
+        revenueData,
+        ordersByStatus,
+        productsByCategory,
+        recentOrders,
+        topProducts,
+        lowStockProducts,
+      ] = await Promise.all([
+        query('SELECT COUNT(*) FROM products').catch(() => ({ rows: [{ count: '0' }] })),
+        query('SELECT COUNT(*) FROM categories').catch(() => ({ rows: [{ count: '0' }] })),
+        query('SELECT COUNT(*) FROM suppliers').catch(() => ({ rows: [{ count: '0' }] })),
+        query('SELECT COUNT(*) FROM orders').catch(() => ({ rows: [{ count: '0' }] })),
+        query('SELECT COUNT(*) FROM products WHERE quantity <= low_stock_threshold').catch(() => ({ rows: [{ count: '0' }] })),
+        query(`
+          SELECT 
+            COALESCE(SUM(total), 0) as current_revenue,
+            COALESCE(SUM(CASE WHEN created_at >= NOW() - INTERVAL '30 days' THEN total ELSE 0 END), 0) as last_30_days,
+            COALESCE(SUM(CASE WHEN created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days' THEN total ELSE 0 END), 0) as previous_30_days
+          FROM orders 
+          WHERE status = 'completed'
+        `).catch(() => ({ rows: [{ current_revenue: '0', last_30_days: '0', previous_30_days: '0' }] })),
+        query(`
+          SELECT status, COUNT(*) as count
+          FROM orders
+          GROUP BY status
+          ORDER BY count DESC
+        `).catch(() => ({ rows: [] })),
+        query(`
+          SELECT c.name as category, COUNT(p.id) as count
+          FROM categories c
+          LEFT JOIN products p ON c.id = p.category_id
+          GROUP BY c.id, c.name
+          ORDER BY count DESC
+          LIMIT 10
+        `).catch(() => ({ rows: [] })),
+        query(`
+          SELECT 
+            o.*,
+            p.name as product_name,
+            s.name as supplier_name
+          FROM orders o
+          LEFT JOIN products p ON o.product_id = p.id
+          LEFT JOIN suppliers s ON o.supplier_id = s.id
+          ORDER BY o.created_at DESC
+          LIMIT 10
+        `).catch(() => ({ rows: [] })),
+        query(`
+          SELECT 
+            p.id,
+            p.name,
+            c.name as category,
+            COUNT(o.id) as units_sold,
+            COALESCE(SUM(o.total), 0) as revenue
+          FROM products p
+          LEFT JOIN categories c ON p.category_id = c.id
+          LEFT JOIN orders o ON p.id = o.product_id AND o.status = 'completed'
+          GROUP BY p.id, p.name, c.name
+          ORDER BY units_sold DESC, revenue DESC
+          LIMIT 10
+        `).catch(() => ({ rows: [] })),
+        query(`
+          SELECT 
+            p.*,
+            c.name as category_name,
+            s.name as supplier_name
+          FROM products p
+          LEFT JOIN categories c ON p.category_id = c.id
+          LEFT JOIN suppliers s ON p.supplier_id = s.id
+          WHERE p.quantity <= p.low_stock_threshold
+          ORDER BY (p.quantity::float / p.low_stock_threshold) ASC
+          LIMIT 10
+        `).catch(() => ({ rows: [] })),
+      ]);
 
     // Calculate revenue change
     const currentRevenue = parseFloat(revenueData.rows[0].current_revenue);
@@ -164,6 +165,59 @@ router.get('/dashboard',
       success: true,
       data: dashboardData,
     });
+    } catch (error) {
+      logger.error('Dashboard analytics error:', error);
+      res.status(500).json({
+        success: false,
+        error: {
+          message: 'Failed to load dashboard data',
+          code: 'DASHBOARD_ERROR',
+          statusCode: 500,
+        },
+      });
+    }
+  })
+);
+
+/**
+ * @swagger
+ * /api/v1/analytics/test:
+ *   get:
+ *     summary: Test analytics endpoint
+ *     tags: [Analytics]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Test successful
+ */
+router.get('/test',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    try {
+      // Test database connection
+      const testResult = await query('SELECT 1 as test');
+      
+      res.json({
+        success: true,
+        data: {
+          message: 'Analytics endpoint is working',
+          database: 'connected',
+          testResult: testResult.rows[0],
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      logger.error('Analytics test error:', error);
+      res.status(500).json({
+        success: false,
+        error: {
+          message: 'Analytics test failed',
+          code: 'TEST_ERROR',
+          statusCode: 500,
+        },
+      });
+    }
   })
 );
 
