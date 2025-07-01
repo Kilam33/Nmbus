@@ -84,10 +84,7 @@ class Server {
     this.app.use(cors({
       origin: function (origin, callback) {
         // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) {
-          logger.debug('CORS: Allowing request with no origin');
-          return callback(null, true);
-        }
+        if (!origin) return callback(null, true);
         
         const allowedOrigins = [
           'http://localhost:3000',
@@ -99,8 +96,8 @@ class Server {
           'https://nmbus.ip-ddns.com',
           'https://nmbus.ip-ddns.com:3000',
           'https://nmbus.ip-ddns.com:3173',
-          'https://nmbus.ip-ddns.com:4173',
           'https://api.nmbus.ip-ddns.com',
+          'https://nmbus.ip-ddns.com:4173',
         ];
         
         // Add production frontend URL if specified
@@ -109,11 +106,9 @@ class Server {
         }
         
         if (allowedOrigins.indexOf(origin) !== -1 || config.nodeEnv === 'development') {
-          logger.debug(`CORS: Allowing request from origin: ${origin}`);
           callback(null, true);
         } else {
           logger.warn(`CORS blocked request from origin: ${origin}`);
-          logger.debug(`Allowed origins: ${allowedOrigins.join(', ')}`);
           callback(new Error('Not allowed by CORS'));
         }
       },
@@ -126,21 +121,22 @@ class Server {
         'Accept',
         'Origin',
         'Cache-Control',
-        'X-File-Name',
-        'X-Request-ID',
-        'X-Total-Count'
+        'X-File-Name'
       ],
       exposedHeaders: ['X-Request-ID', 'X-Total-Count'],
       maxAge: 86400, // 24 hours
-      preflightContinue: false,
-      optionsSuccessStatus: 204
     }));
 
     // Security middleware
     this.app.use(helmet({
-      contentSecurityPolicy: false, // Disable CSP for API server
-      crossOriginEmbedderPolicy: false,
-      crossOriginResourcePolicy: { policy: "cross-origin" }
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'"],
+          imgSrc: ["'self'", "data:", "https:"],
+        },
+      },
     }));
 
     // Compression and parsing
@@ -172,6 +168,9 @@ class Server {
   private initializeRoutes(): void {
     const apiPrefix = `/api/${config.apiVersion}`;
 
+    // Handle preflight requests for all routes
+    this.app.options('*', cors());
+
     // Health check route (no auth required)
     this.app.use(`${apiPrefix}/health`, healthRoutes);
 
@@ -190,15 +189,6 @@ class Server {
         message: 'NIMBUS Inventory Management API',
         version: config.apiVersion,
         environment: config.nodeEnv,
-        timestamp: new Date().toISOString(),
-      });
-    });
-
-    // CORS test route
-    this.app.get('/cors-test', (req, res) => {
-      res.json({
-        message: 'CORS test successful',
-        origin: req.headers.origin,
         timestamp: new Date().toISOString(),
       });
     });
