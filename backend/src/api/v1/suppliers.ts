@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler, NotFoundError, ValidationError } from '@/middleware/error.middleware';
-import { requireAuth } from '@/middleware/auth.middleware';
-import { validate, schemas } from '@/middleware/validation.middleware';
-import { cache, invalidateCache } from '@/middleware/cache.middleware';
-import { query } from '@/utils/database';
-import { logger } from '@/utils/logger';
-import { Supplier, ApiResponse } from '@/types';
+import { asyncHandler, NotFoundError, ValidationError } from '../../middleware/error.middleware';
+import { requireAuth } from '../../middleware/auth.middleware';
+import { validate, schemas } from '../../middleware/validation.middleware';
+import { cache, invalidateCache } from '../../middleware/cache.middleware';
+import { query } from '../../utils/database';
+import { logger } from '../../utils/logger';
+import { Supplier, ApiResponse } from '../../types';
 
 const router = Router();
 

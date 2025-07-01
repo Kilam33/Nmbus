@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '@/middleware/error.middleware';
-import { checkDatabaseHealth } from '@/utils/database';
-import { redisService } from '@/utils/redis';
-import { getHealthMetrics, getMetrics } from '@/middleware/metrics.middleware';
-import { logger } from '@/utils/logger';
+import { asyncHandler } from '../../middleware/error.middleware';
+import { checkDatabaseHealth } from '../../utils/database';
+import { redisService } from '../../utils/redis';
+import { getHealthMetrics, getMetrics } from '../../middleware/metrics.middleware';
+import { logger } from '../../utils/logger';
 
 const router = Router();
 

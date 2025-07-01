@@ -1,13 +1,13 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '@/middleware/error.middleware';
-import { requireAuth } from '@/middleware/auth.middleware';
-import { validate, schemas } from '@/middleware/validation.middleware';
-import { analyticsCache } from '@/middleware/cache.middleware';
-import { query } from '@/utils/database';
-import { logger } from '@/utils/logger';
-import { DashboardData, SalesAnalytics, TurnoverData, ReorderSuggestion } from '@/types';
+import { asyncHandler } from '../../middleware/error.middleware';
+import { requireAuth } from '../../middleware/auth.middleware';
+import { validate, schemas } from '../../middleware/validation.middleware';
+import { analyticsCache } from '../../middleware/cache.middleware';
+import { query } from '../../utils/database';
+import { logger } from '../../utils/logger';
+import { DashboardData, SalesAnalytics, TurnoverData, ReorderSuggestion } from '../../types';
 import { z } from 'zod';
-import { ValidationError } from '@/middleware/error.middleware';
+import { ValidationError } from '../../middleware/error.middleware';
 
 const router = Router();
 

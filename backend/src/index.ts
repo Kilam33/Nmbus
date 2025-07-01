@@ -7,24 +7,24 @@ import morgan from 'morgan';
 import { createClient } from 'redis';
 import cron from 'node-cron';
 
-import { config } from '@/config/app.config';
-import { logger } from '@/utils/logger';
-import { errorHandler } from '@/middleware/error.middleware';
-import { notFoundHandler } from '@/middleware/notFound.middleware';
-import { rateLimitMiddleware } from '@/middleware/rateLimit.middleware';
-import { metricsMiddleware } from '@/middleware/metrics.middleware';
-import { setupSwagger } from '@/config/swagger.config';
-import { reorderService } from '@/services/reorder.service';
+import { config } from './config/app.config';
+import { logger } from './utils/logger';
+import { errorHandler } from './middleware/error.middleware';
+import { notFoundHandler } from './middleware/notFound.middleware';
+import { rateLimitMiddleware } from './middleware/rateLimit.middleware';
+import { metricsMiddleware } from './middleware/metrics.middleware';
+import { setupSwagger } from './config/swagger.config';
+import { reorderService } from './services/reorder.service';
 
 // Route imports
-import authRoutes from '@/api/v1/auth';
-import productsRoutes from '@/api/v1/products';
-import categoriesRoutes from '@/api/v1/categories';
-import suppliersRoutes from '@/api/v1/suppliers';
-import ordersRoutes from '@/api/v1/orders';
-import analyticsRoutes from '@/api/v1/analytics';
-import healthRoutes from '@/api/v1/health';
-import reorderRoutes from '@/api/v1/reorder';
+import authRoutes from './api/v1/auth';
+import productsRoutes from './api/v1/products';
+import categoriesRoutes from './api/v1/categories';
+import suppliersRoutes from './api/v1/suppliers';
+import ordersRoutes from './api/v1/orders';
+import analyticsRoutes from './api/v1/analytics';
+import healthRoutes from './api/v1/health';
+import reorderRoutes from './api/v1/reorder';
 
 class Server {
   private app: Express;
@@ -93,6 +93,10 @@ class Server {
           'http://127.0.0.1:3000',
           'http://127.0.0.1:3173',
           'http://127.0.0.1:4173',
+          'https://nmbus.ip-ddns.com',
+          'https://nmbus.ip-ddns.com:3000',
+          'https://nmbus.ip-ddns.com:3173',
+          'https://nmbus.ip-ddns.com:4173',
         ];
         
         // Add production frontend URL if specified

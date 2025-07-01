@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
-import { config } from '@/config/app.config';
+import { config } from '../config/app.config';
 import { UnauthorizedError, asyncHandler } from './error.middleware';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 // Initialize Supabase client
 const supabase = createClient(config.supabase.url, config.supabase.anonKey);

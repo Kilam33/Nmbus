@@ -1,7 +1,7 @@
-import { query, transaction } from '@/utils/database';
-import { logger } from '@/utils/logger';
+import { query, transaction } from '../utils/database';
+import { logger } from '../utils/logger';
 import { forecastingAgent } from './forecasting.agent';
-import { redisService } from '@/utils/redis';
+import { redisService } from '../utils/redis';
 import { v4 as uuidv4 } from 'uuid';
 import { 
   ReorderSuggestion, 
@@ -12,7 +12,7 @@ import {
   ReorderPolicyFormData,
   ReorderSettings,
   ReorderSettingsFormData
-} from '@/types';
+} from '../types';
 
 class ReorderService {
   async startAnalysis(params: {

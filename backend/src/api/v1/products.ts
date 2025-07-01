@@ -1,12 +1,12 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler, NotFoundError, ValidationError } from '@/middleware/error.middleware';
-import { requireAuth } from '@/middleware/auth.middleware';
-import { validate, schemas } from '@/middleware/validation.middleware';
-import { productCache, invalidateCache } from '@/middleware/cache.middleware';
-import { query } from '@/utils/database';
-import { redisService } from '@/utils/redis';
-import { logger } from '@/utils/logger';
-import { Product, ApiResponse } from '@/types';
+import { asyncHandler, NotFoundError, ValidationError } from '../../middleware/error.middleware';
+import { requireAuth } from '../../middleware/auth.middleware';
+import { validate, schemas } from '../../middleware/validation.middleware';
+import { productCache, invalidateCache } from '../../middleware/cache.middleware';
+import { query } from '../../utils/database';
+import { redisService } from '../../utils/redis';
+import { logger } from '../../utils/logger';
+import { Product, ApiResponse } from '../../types';
 import { z } from 'zod';
 
 const router = Router();

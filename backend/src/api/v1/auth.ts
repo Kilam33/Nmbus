@@ -1,13 +1,13 @@
 import { Router, Request, Response } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
-import { config } from '@/config/app.config';
-import { asyncHandler, ValidationError, UnauthorizedError } from '@/middleware/error.middleware';
-import { validate } from '@/middleware/validation.middleware';
-import { authRateLimit } from '@/middleware/rateLimit.middleware';
-import { requireAuth } from '@/middleware/auth.middleware';
-import { logger } from '@/utils/logger';
-import { redisService } from '@/utils/redis';
+import { config } from '../../config/app.config';
+import { asyncHandler, ValidationError, UnauthorizedError } from '../../middleware/error.middleware';
+import { validate } from '../../middleware/validation.middleware';
+import { authRateLimit } from '../../middleware/rateLimit.middleware';
+import { requireAuth } from '../../middleware/auth.middleware';
+import { logger } from '../../utils/logger';
+import { redisService } from '../../utils/redis';
 import { z } from 'zod';
 
 const router = Router();

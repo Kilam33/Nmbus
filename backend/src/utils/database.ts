@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg';
-import { config } from '@/config/app.config';
-import { logger } from '@/utils/logger';
+import { config } from '../config/app.config';
+import { logger } from './logger';
 
 // Database connection pool
 export const pool = new Pool({

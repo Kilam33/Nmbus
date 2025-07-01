@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import promClient from 'prom-client';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 // Initialize Prometheus metrics
 const register = promClient.register;

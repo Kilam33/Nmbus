@@ -52,7 +52,7 @@ class ApiClient {
   }> = [];
 
   constructor() {
-    this.baseURL = 'https://api.nmbus.ip-ddns.com';
+    this.baseURL = 'https://api.nmbus.ip-ddns.com/api/v1';
     
     this.client = axios.create({
       baseURL: this.baseURL,

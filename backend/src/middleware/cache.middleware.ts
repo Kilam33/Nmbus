@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { redisService } from '@/utils/redis';
-import { logger } from '@/utils/logger';
-import { config } from '@/config/app.config';
+import { redisService } from '../utils/redis';
+import { logger } from '../utils/logger';
+import { config } from '../config/app.config';
 import { asyncHandler } from './error.middleware';
 
 interface CacheOptions {

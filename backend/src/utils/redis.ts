@@ -1,5 +1,5 @@
-import { logger } from '@/utils/logger';
-import { config } from '@/config/app.config';
+import { logger } from './logger';
+import { config } from '../config/app.config';
 
 interface CacheOptions {
   ttl?: number;

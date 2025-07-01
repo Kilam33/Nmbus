@@ -1,12 +1,12 @@
-import { query } from '@/utils/database';
-import { logger } from '@/utils/logger';
-import { redisService } from '@/utils/redis';
+import { query } from '../utils/database';
+import { logger } from '../utils/logger';
+import { redisService } from '../utils/redis';
 import { 
   DemandForecast, 
   ForecastOptions, 
   SeasonalPattern, 
   TrendAnalysis 
-} from '@/types';
+} from '../types';
 
 class ForecastingAgent {
   private readonly CACHE_TTL = 1800; // 30 minutes

@@ -1,7 +1,7 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
-import { config } from '@/config/app.config';
-import { logger } from '@/utils/logger';
+import { config } from '../config/app.config';
+import { logger } from '../utils/logger';
 
 // Create rate limiter with Redis store
 export const rateLimitMiddleware = rateLimit({
